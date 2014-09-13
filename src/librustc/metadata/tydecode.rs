@@ -26,7 +26,6 @@ use std::string::String;
 use std::uint;
 use syntax::abi;
 use syntax::ast;
-use syntax::ast::*;
 use syntax::parse::token;
 
 // Compact string representation for ty::t values. API ty_str &
@@ -523,10 +522,10 @@ fn parse_hex(st: &mut PState) -> uint {
     };
 }
 
-fn parse_fn_style(c: char) -> FnStyle {
+fn parse_fn_style(c: char) -> ast::FnStyle {
     match c {
-        'u' => UnsafeFn,
-        'n' => NormalFn,
+        'u' => ast::UnsafeFn,
+        'n' => ast::NormalFn,
         _ => panic!("parse_fn_style: bad fn_style {}", c)
     }
 }
