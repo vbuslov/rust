@@ -17,10 +17,10 @@
 //
 // Hopefully useful general knowledge about trans:
 //
-//   * There's no way to find out the ty::t type of a ValueRef.  Doing so
+//   * There's no way to find out the Ty type of a ValueRef.  Doing so
 //     would be "trying to get the eggs out of an omelette" (credit:
 //     pcwalton).  You can, instead, find out its TypeRef by calling val_ty,
-//     but one TypeRef corresponds to many `ty::t`s; for instance, tup(int, int,
+//     but one TypeRef corresponds to many `Ty`s; for instance, tup(int, int,
 //     int) and rec(x=int, y=int, z=int) will have the same TypeRef.
 
 #![allow(non_camel_case_types)]
@@ -74,7 +74,7 @@ use middle::trans::type_::Type;
 use middle::trans::type_of;
 use middle::trans::type_of::*;
 use middle::trans::value::Value;
-use middle::ty;
+use middle::ty::{mod, Ty};
 use util::common::indenter;
 use util::ppaux::{Repr, ty_to_string};
 use util::sha2::Sha256;
@@ -180,7 +180,7 @@ impl<'a, 'tcx> Drop for StatRecorder<'a, 'tcx> {
 
 // only use this for foreign function ABIs and glue, use `decl_rust_fn` for Rust functions
 pub fn decl_fn(ccx: &CrateContext, name: &str, cc: llvm::CallConv,
-           ty: Type, output: ty::FnOutput) -> ValueRef {
+               ty: Type, output: ty::FnOutput) -> ValueRef {
 
     let llfn: ValueRef = name.with_c_str(|buf| {
         unsafe {
@@ -212,7 +212,7 @@ pub fn decl_fn(ccx: &CrateContext, name: &str, cc: llvm::CallConv,
 pub fn decl_cdecl_fn(ccx: &CrateContext,
                      name: &str,
                      ty: Type,
-                     output: ty::t) -> ValueRef {
+                     output: Ty) -> ValueRef {
     decl_fn(ccx, name, llvm::CCallConv, ty, ty::FnConverging(output))
 }
 
@@ -222,7 +222,7 @@ pub fn get_extern_fn(ccx: &CrateContext,
                      name: &str,
                      cc: llvm::CallConv,
                      ty: Type,
-                     output: ty::t)
+                     output: Ty)
                      -> ValueRef {
     match externs.find_equiv(&name) {
         Some(n) => return *n,
@@ -233,7 +233,7 @@ pub fn get_extern_fn(ccx: &CrateContext,
     f
 }
 
-fn get_extern_rust_fn(ccx: &CrateContext, fn_ty: ty::t, name: &str, did: ast::DefId) -> ValueRef {
+fn get_extern_rust_fn(ccx: &CrateContext, fn_ty: Ty, name: &str, did: ast::DefId) -> ValueRef {
     match ccx.externs().borrow().find_equiv(&name) {
         Some(n) => return *n,
         None => ()
@@ -251,8 +251,8 @@ fn get_extern_rust_fn(ccx: &CrateContext, fn_ty: ty::t, name: &str, did: ast::De
 
 pub fn self_type_for_unboxed_closure(ccx: &CrateContext,
                                      closure_id: ast::DefId,
-                                     fn_ty: ty::t)
-                                     -> ty::t {
+                                     fn_ty: Ty)
+                                     -> Ty {
     let unboxed_closures = ccx.tcx().unboxed_closures.borrow();
     let unboxed_closure = &(*unboxed_closures)[closure_id];
     match unboxed_closure.kind {
@@ -272,7 +272,7 @@ pub fn kind_for_unboxed_closure(ccx: &CrateContext, closure_id: ast::DefId)
     (*unboxed_closures)[closure_id].kind
 }
 
-pub fn decl_rust_fn(ccx: &CrateContext, fn_ty: ty::t, name: &str) -> ValueRef {
+pub fn decl_rust_fn(ccx: &CrateContext, fn_ty: Ty, name: &str) -> ValueRef {
     let (inputs, output, abi, env) = match ty::get(fn_ty).sty {
         ty::ty_bare_fn(ref f) => {
             (f.sig.inputs.clone(), f.sig.output, f.abi, None)
@@ -306,14 +306,14 @@ pub fn decl_rust_fn(ccx: &CrateContext, fn_ty: ty::t, name: &str) -> ValueRef {
     llfn
 }
 
-pub fn decl_internal_rust_fn(ccx: &CrateContext, fn_ty: ty::t, name: &str) -> ValueRef {
+pub fn decl_internal_rust_fn(ccx: &CrateContext, fn_ty: Ty, name: &str) -> ValueRef {
     let llfn = decl_rust_fn(ccx, fn_ty, name);
     llvm::SetLinkage(llfn, llvm::InternalLinkage);
     llfn
 }
 
 pub fn get_extern_const(ccx: &CrateContext, did: ast::DefId,
-                        t: ty::t) -> ValueRef {
+                        t: Ty) -> ValueRef {
     let name = csearch::get_symbol(&ccx.sess().cstore, did);
     let ty = type_of(ccx, t);
     match ccx.externs().borrow_mut().find(&name) {
@@ -344,7 +344,7 @@ pub fn get_extern_const(ccx: &CrateContext, did: ast::DefId,
 // Returns a pointer to the body for the box. The box may be an opaque
 // box. The result will be casted to the type of body_t, if it is statically
 // known.
-pub fn at_box_body(bcx: Block, body_t: ty::t, boxptr: ValueRef) -> ValueRef {
+pub fn at_box_body(bcx: Block, body_t: Ty, boxptr: ValueRef) -> ValueRef {
     let _icx = push_ctxt("at_box_body");
     let ccx = bcx.ccx();
     let ty = Type::at_box(ccx, type_of(ccx, body_t));
@@ -352,7 +352,7 @@ pub fn at_box_body(bcx: Block, body_t: ty::t, boxptr: ValueRef) -> ValueRef {
     GEPi(bcx, boxptr, [0u, abi::box_field_body])
 }
 
-fn require_alloc_fn(bcx: Block, info_ty: ty::t, it: LangItem) -> ast::DefId {
+fn require_alloc_fn(bcx: Block, info_ty: Ty, it: LangItem) -> ast::DefId {
     match bcx.tcx().lang_items.require(it) {
         Ok(id) => id,
         Err(s) => {
@@ -368,7 +368,7 @@ fn require_alloc_fn(bcx: Block, info_ty: ty::t, it: LangItem) -> ast::DefId {
 
 pub fn malloc_raw_dyn<'blk, 'tcx>(bcx: Block<'blk, 'tcx>,
                                   llty_ptr: Type,
-                                  info_ty: ty::t,
+                                  info_ty: Ty,
                                   size: ValueRef,
                                   align: ValueRef)
                                   -> Result<'blk, 'tcx> {
@@ -383,7 +383,7 @@ pub fn malloc_raw_dyn<'blk, 'tcx>(bcx: Block<'blk, 'tcx>,
     Result::new(r.bcx, PointerCast(r.bcx, r.val, llty_ptr))
 }
 
-pub fn malloc_raw_dyn_proc<'blk, 'tcx>(bcx: Block<'blk, 'tcx>, t: ty::t) -> Result<'blk, 'tcx> {
+pub fn malloc_raw_dyn_proc<'blk, 'tcx>(bcx: Block<'blk, 'tcx>, t: Ty) -> Result<'blk, 'tcx> {
     let _icx = push_ctxt("malloc_raw_dyn_proc");
     let ccx = bcx.ccx();
 
@@ -408,7 +408,7 @@ pub fn malloc_raw_dyn_proc<'blk, 'tcx>(bcx: Block<'blk, 'tcx>, t: ty::t) -> Resu
 
 // Type descriptor and type glue stuff
 
-pub fn get_tydesc(ccx: &CrateContext, t: ty::t) -> Rc<tydesc_info> {
+pub fn get_tydesc(ccx: &CrateContext, t: Ty) -> Rc<tydesc_info> {
     match ccx.tydescs().borrow().find(&t) {
         Some(inf) => return inf.clone(),
         _ => { }
@@ -505,7 +505,7 @@ pub fn note_unique_llvm_symbol(ccx: &CrateContext, sym: String) {
 
 pub fn get_res_dtor(ccx: &CrateContext,
                     did: ast::DefId,
-                    t: ty::t,
+                    t: Ty,
                     parent_id: ast::DefId,
                     substs: &subst::Substs)
                  -> ValueRef {
@@ -557,7 +557,7 @@ pub enum scalar_type { nil_type, signed_int, unsigned_int, floating_point, }
 pub fn compare_scalar_types<'blk, 'tcx>(cx: Block<'blk, 'tcx>,
                                         lhs: ValueRef,
                                         rhs: ValueRef,
-                                        t: ty::t,
+                                        t: Ty,
                                         op: ast::BinOp)
                                         -> Result<'blk, 'tcx> {
     let f = |a| Result::new(cx, compare_scalar_values(cx, lhs, rhs, a, op));
@@ -639,7 +639,7 @@ pub fn compare_simd_types(
                     cx: Block,
                     lhs: ValueRef,
                     rhs: ValueRef,
-                    t: ty::t,
+                    t: Ty,
                     size: uint,
                     op: ast::BinOp)
                     -> ValueRef {
@@ -674,12 +674,12 @@ pub fn compare_simd_types(
 }
 
 pub type val_and_ty_fn<'a, 'blk, 'tcx> =
-    |Block<'blk, 'tcx>, ValueRef, ty::t|: 'a -> Block<'blk, 'tcx>;
+    |Block<'blk, 'tcx>, ValueRef, Ty|: 'a -> Block<'blk, 'tcx>;
 
 // Iterates through the elements of a structural type.
 pub fn iter_structural_ty<'a, 'blk, 'tcx>(cx: Block<'blk, 'tcx>,
                                           av: ValueRef,
-                                          t: ty::t,
+                                          t: Ty,
                                           f: val_and_ty_fn<'a, 'blk, 'tcx>)
                                           -> Block<'blk, 'tcx> {
     let _icx = push_ctxt("iter_structural_ty");
@@ -863,7 +863,7 @@ pub fn fail_if_zero_or_overflows<'blk, 'tcx>(
                                 divrem: ast::BinOp,
                                 lhs: ValueRef,
                                 rhs: ValueRef,
-                                rhs_t: ty::t)
+                                rhs_t: Ty)
                                 -> Block<'blk, 'tcx> {
     let (zero_text, overflow_text) = if divrem == ast::BiDiv {
         ("attempted to divide by zero",
@@ -930,7 +930,7 @@ pub fn fail_if_zero_or_overflows<'blk, 'tcx>(
     }
 }
 
-pub fn trans_external_path(ccx: &CrateContext, did: ast::DefId, t: ty::t) -> ValueRef {
+pub fn trans_external_path(ccx: &CrateContext, did: ast::DefId, t: Ty) -> ValueRef {
     let name = csearch::get_symbol(&ccx.sess().cstore, did);
     match ty::get(t).sty {
         ty::ty_bare_fn(ref fn_ty) => {
@@ -960,7 +960,7 @@ pub fn trans_external_path(ccx: &CrateContext, did: ast::DefId, t: ty::t) -> Val
 pub fn invoke<'blk, 'tcx>(bcx: Block<'blk, 'tcx>,
                           llfn: ValueRef,
                           llargs: Vec<ValueRef> ,
-                          fn_ty: ty::t,
+                          fn_ty: Ty,
                           call_info: Option<NodeInfo>,
                           // FIXME(15064) is_lang_item is a horrible hack, please remove it
                           // at the soonest opportunity.
@@ -1037,13 +1037,13 @@ pub fn need_invoke(bcx: Block) -> bool {
     bcx.fcx.needs_invoke()
 }
 
-pub fn load_if_immediate(cx: Block, v: ValueRef, t: ty::t) -> ValueRef {
+pub fn load_if_immediate(cx: Block, v: ValueRef, t: Ty) -> ValueRef {
     let _icx = push_ctxt("load_if_immediate");
     if type_is_immediate(cx.ccx(), t) { return load_ty(cx, v, t); }
     return v;
 }
 
-pub fn load_ty(cx: Block, ptr: ValueRef, t: ty::t) -> ValueRef {
+pub fn load_ty(cx: Block, ptr: ValueRef, t: Ty) -> ValueRef {
     /*!
      * Helper for loading values from memory. Does the necessary conversion if
      * the in-memory type differs from the type used for SSA values. Also
@@ -1063,7 +1063,7 @@ pub fn load_ty(cx: Block, ptr: ValueRef, t: ty::t) -> ValueRef {
     }
 }
 
-pub fn store_ty(cx: Block, v: ValueRef, dst: ValueRef, t: ty::t) {
+pub fn store_ty(cx: Block, v: ValueRef, dst: ValueRef, t: Ty) {
     /*!
      * Helper for storing values in memory. Does the necessary conversion if
      * the in-memory type differs from the type used for SSA values.
@@ -1156,7 +1156,7 @@ pub fn call_memcpy(cx: Block, dst: ValueRef, src: ValueRef, n_bytes: ValueRef, a
     Call(cx, memcpy, [dst_ptr, src_ptr, size, align, volatile], None);
 }
 
-pub fn memcpy_ty(bcx: Block, dst: ValueRef, src: ValueRef, t: ty::t) {
+pub fn memcpy_ty(bcx: Block, dst: ValueRef, src: ValueRef, t: Ty) {
     let _icx = push_ctxt("memcpy_ty");
     let ccx = bcx.ccx();
     if ty::type_is_structural(t) {
@@ -1169,7 +1169,7 @@ pub fn memcpy_ty(bcx: Block, dst: ValueRef, src: ValueRef, t: ty::t) {
     }
 }
 
-pub fn zero_mem(cx: Block, llptr: ValueRef, t: ty::t) {
+pub fn zero_mem(cx: Block, llptr: ValueRef, t: Ty) {
     if cx.unreachable.get() { return; }
     let _icx = push_ctxt("zero_mem");
     let bcx = cx;
@@ -1181,7 +1181,7 @@ pub fn zero_mem(cx: Block, llptr: ValueRef, t: ty::t) {
 // allocation for large data structures, and the generated code will be
 // awful. (A telltale sign of this is large quantities of
 // `mov [byte ptr foo],0` in the generated code.)
-fn memzero(b: &Builder, llptr: ValueRef, ty: ty::t) {
+fn memzero(b: &Builder, llptr: ValueRef, ty: Ty) {
     let _icx = push_ctxt("memzero");
     let ccx = b.ccx;
 
@@ -1201,7 +1201,7 @@ fn memzero(b: &Builder, llptr: ValueRef, ty: ty::t) {
     b.call(llintrinsicfn, [llptr, llzeroval, size, align, volatile], None);
 }
 
-pub fn alloc_ty(bcx: Block, t: ty::t, name: &str) -> ValueRef {
+pub fn alloc_ty(bcx: Block, t: Ty, name: &str) -> ValueRef {
     let _icx = push_ctxt("alloc_ty");
     let ccx = bcx.ccx();
     let ty = type_of::type_of(ccx, t);
@@ -1227,7 +1227,7 @@ pub fn alloca_no_lifetime(cx: Block, ty: Type, name: &str) -> ValueRef {
     Alloca(cx, ty, name)
 }
 
-pub fn alloca_zeroed(cx: Block, ty: ty::t, name: &str) -> ValueRef {
+pub fn alloca_zeroed(cx: Block, ty: Ty, name: &str) -> ValueRef {
     let llty = type_of::type_of(cx.ccx(), ty);
     if cx.unreachable.get() {
         unsafe {
@@ -1255,7 +1255,7 @@ pub fn arrayalloca(cx: Block, ty: Type, v: ValueRef) -> ValueRef {
 }
 
 // Creates the alloca slot which holds the pointer to the slot for the final return value
-pub fn make_return_slot_pointer(fcx: &FunctionContext, output_type: ty::t) -> ValueRef {
+pub fn make_return_slot_pointer(fcx: &FunctionContext, output_type: Ty) -> ValueRef {
     let lloutputtype = type_of::type_of(fcx.ccx, output_type);
 
     // We create an alloca to hold a pointer of type `output_type`
@@ -1506,7 +1506,7 @@ pub fn init_function<'a, 'tcx>(fcx: &'a FunctionContext<'a, 'tcx>,
 //  - new_fn_ctxt
 //  - trans_args
 
-pub fn arg_kind(cx: &FunctionContext, t: ty::t) -> datum::Rvalue {
+pub fn arg_kind(cx: &FunctionContext, t: Ty) -> datum::Rvalue {
     use middle::trans::datum::{ByRef, ByValue};
 
     datum::Rvalue {
@@ -1522,7 +1522,7 @@ pub type LvalueDatum = datum::Datum<datum::Lvalue>;
 // incoming function arguments. These will later be stored into
 // appropriate lvalue datums.
 pub fn create_datums_for_fn_args(fcx: &FunctionContext,
-                                 arg_tys: &[ty::t])
+                                 arg_tys: &[Ty])
                                  -> Vec<RvalueDatum> {
     let _icx = push_ctxt("create_datums_for_fn_args");
 
@@ -1542,7 +1542,7 @@ pub fn create_datums_for_fn_args(fcx: &FunctionContext,
 fn create_datums_for_fn_args_under_call_abi(
         mut bcx: Block,
         arg_scope: cleanup::CustomScopeIndex,
-        arg_tys: &[ty::t])
+        arg_tys: &[Ty])
         -> Vec<RvalueDatum> {
     let mut result = Vec::new();
     for (i, &arg_ty) in arg_tys.iter().enumerate() {
@@ -1643,7 +1643,7 @@ fn copy_unboxed_closure_args_to_allocas<'blk, 'tcx>(
                                         arg_scope: cleanup::CustomScopeIndex,
                                         args: &[ast::Arg],
                                         arg_datums: Vec<RvalueDatum>,
-                                        monomorphized_arg_types: &[ty::t])
+                                        monomorphized_arg_types: &[Ty])
                                         -> Block<'blk, 'tcx> {
     let _icx = push_ctxt("copy_unboxed_closure_args_to_allocas");
     let arg_scope_id = cleanup::CustomScope(arg_scope);
@@ -1976,7 +1976,7 @@ pub fn trans_enum_variant(ccx: &CrateContext,
 }
 
 pub fn trans_named_tuple_constructor<'blk, 'tcx>(mut bcx: Block<'blk, 'tcx>,
-                                                 ctor_ty: ty::t,
+                                                 ctor_ty: Ty,
                                                  disr: ty::Disr,
                                                  args: callee::CallArgs,
                                                  dest: expr::Dest,
@@ -2350,7 +2350,7 @@ fn register_fn(ccx: &CrateContext,
                sp: Span,
                sym: String,
                node_id: ast::NodeId,
-               node_type: ty::t)
+               node_type: Ty)
                -> ValueRef {
     match ty::get(node_type).sty {
         ty::ty_bare_fn(ref f) => {
@@ -2364,7 +2364,7 @@ fn register_fn(ccx: &CrateContext,
     llfn
 }
 
-pub fn get_fn_llvm_attributes(ccx: &CrateContext, fn_ty: ty::t)
+pub fn get_fn_llvm_attributes(ccx: &CrateContext, fn_ty: Ty)
                               -> llvm::AttrBuilder {
     use middle::ty::{BrAnon, ReLateBound};
 
@@ -2643,7 +2643,7 @@ pub fn create_entry_wrapper(ccx: &CrateContext,
 }
 
 fn exported_name(ccx: &CrateContext, id: ast::NodeId,
-                 ty: ty::t, attrs: &[ast::Attribute]) -> String {
+                 ty: Ty, attrs: &[ast::Attribute]) -> String {
     match ccx.external_srcs().borrow().find(&id) {
         Some(&did) => {
             let sym = csearch::get_symbol(&ccx.sess().cstore, did);

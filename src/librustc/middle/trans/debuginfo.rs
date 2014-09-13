@@ -172,9 +172,9 @@ to always map crate and node IDs back to the original crate context.
 
 As a side-effect these unique type IDs also help to solve a problem arising from
 lifetime parameters. Since lifetime parameters are completely omitted in
-debuginfo, more than one `ty::t` instance may map to the same debuginfo type
+debuginfo, more than one `Ty` instance may map to the same debuginfo type
 metadata, that is, some struct `Struct<'a>` may have N instantiations with
-different concrete substitutions for `'a`, and thus there will be N `ty::t`
+different concrete substitutions for `'a`, and thus there will be N `Ty`
 instances for the type `Struct<'a>` even though it is not generic otherwise.
 Unfortunately this means that we cannot use `ty::type_id()` as cheap identifier
 for type metadata---we have done this in the past, but it led to unnecessary
@@ -198,7 +198,7 @@ use middle::trans::_match::{BindingInfo, TrByCopy, TrByMove, TrByRef};
 use middle::trans::type_of;
 use middle::trans::type_::Type;
 use middle::trans;
-use middle::ty;
+use middle::ty::{mod, Ty};
 use middle::pat_util;
 use util::ppaux;
 
@@ -252,7 +252,7 @@ struct UniqueTypeId(ast::Name);
 
 // The TypeMap is where the CrateDebugContext holds the type metadata nodes
 // created so far. The metadata nodes are indexed by UniqueTypeId, and, for
-// faster lookup, also by ty::t. The TypeMap is responsible for creating
+// faster lookup, also by Ty. The TypeMap is responsible for creating
 // UniqueTypeIds.
 struct TypeMap {
     // The UniqueTypeIds created so far
@@ -276,14 +276,14 @@ impl TypeMap {
         }
     }
 
-    // Adds a ty::t to metadata mapping to the TypeMap. The method will fail if
+    // Adds a Ty to metadata mapping to the TypeMap. The method will fail if
     // the mapping already exists.
     fn register_type_with_metadata(&mut self,
                                    cx: &CrateContext,
-                                   type_: ty::t,
+                                   type_: Ty,
                                    metadata: DIType) {
         if !self.type_to_metadata.insert(ty::type_id(type_), metadata) {
-            cx.sess().bug(format!("Type metadata for ty::t '{}' is already in the TypeMap!",
+            cx.sess().bug(format!("Type metadata for Ty '{}' is already in the TypeMap!",
                                    ppaux::ty_to_string(cx.tcx(), type_)).as_slice());
         }
     }
@@ -301,7 +301,7 @@ impl TypeMap {
         }
     }
 
-    fn find_metadata_for_type(&self, type_: ty::t) -> Option<DIType> {
+    fn find_metadata_for_type(&self, type_: Ty) -> Option<DIType> {
         self.type_to_metadata.find_copy(&ty::type_id(type_))
     }
 
@@ -319,7 +319,7 @@ impl TypeMap {
     // Get the UniqueTypeId for the given type. If the UniqueTypeId for the given
     // type has been requested before, this is just a table lookup. Otherwise an
     // ID will be generated and stored for later lookup.
-    fn get_unique_type_id_of_type(&mut self, cx: &CrateContext, type_: ty::t) -> UniqueTypeId {
+    fn get_unique_type_id_of_type(&mut self, cx: &CrateContext, type_: Ty) -> UniqueTypeId {
 
         // basic type           -> {:name of the type:}
         // tuple                -> {tuple_(:param-uid:)*}
@@ -613,7 +613,7 @@ impl TypeMap {
     // UniqueTypeId for them, since to debuginfo they *are* real types.
     fn get_unique_type_id_of_enum_variant(&mut self,
                                           cx: &CrateContext,
-                                          enum_type: ty::t,
+                                          enum_type: Ty,
                                           variant_name: &str)
                                        -> UniqueTypeId {
         let enum_type_id = self.get_unique_type_id_of_type(cx, enum_type);
@@ -879,7 +879,7 @@ pub fn create_local_var_metadata(bcx: Block, local: &ast::Local) {
 /// Adds the created metadata nodes directly to the crate's IR.
 pub fn create_captured_var_metadata(bcx: Block,
                                     node_id: ast::NodeId,
-                                    env_data_type: ty::t,
+                                    env_data_type: Ty,
                                     env_pointer: ValueRef,
                                     env_index: uint,
                                     closure_store: ty::TraitStore,
@@ -1586,7 +1586,7 @@ fn compile_unit_metadata(cx: &CrateContext) {
 
 fn declare_local(bcx: Block,
                  variable_ident: ast::Ident,
-                 variable_type: ty::t,
+                 variable_type: Ty,
                  scope_metadata: DIScope,
                  variable_access: VariableAccess,
                  variable_kind: VariableKind,
@@ -1733,7 +1733,7 @@ fn diverging_type_metadata(cx: &CrateContext) -> DIType {
     })
 }
 
-fn basic_type_metadata(cx: &CrateContext, t: ty::t) -> DIType {
+fn basic_type_metadata(cx: &CrateContext, t: Ty) -> DIType {
 
     debug!("basic_type_metadata: {}", ty::get(t));
 
@@ -1779,7 +1779,7 @@ fn basic_type_metadata(cx: &CrateContext, t: ty::t) -> DIType {
 }
 
 fn pointer_type_metadata(cx: &CrateContext,
-                         pointer_type: ty::t,
+                         pointer_type: Ty,
                          pointee_type_metadata: DIType)
                       -> DIType {
     let pointer_llvm_type = type_of::type_of(cx, pointer_type);
@@ -1854,7 +1854,7 @@ impl MemberDescriptionFactory {
 // section on Recursive Types at the top of this file for more information.
 enum RecursiveTypeDescription {
     UnfinishedMetadata {
-        unfinished_type: ty::t,
+        unfinished_type: Ty,
         unique_type_id: UniqueTypeId,
         metadata_stub: DICompositeType,
         llvm_type: Type,
@@ -1865,7 +1865,7 @@ enum RecursiveTypeDescription {
 
 fn create_and_register_recursive_type_forward_declaration(
     cx: &CrateContext,
-    unfinished_type: ty::t,
+    unfinished_type: Ty,
     unique_type_id: UniqueTypeId,
     metadata_stub: DICompositeType,
     llvm_type: Type,
@@ -1982,7 +1982,7 @@ impl StructMemberDescriptionFactory {
 
 
 fn prepare_struct_metadata(cx: &CrateContext,
-                           struct_type: ty::t,
+                           struct_type: Ty,
                            def_id: ast::DefId,
                            substs: &subst::Substs,
                            unique_type_id: UniqueTypeId,
@@ -2022,7 +2022,7 @@ fn prepare_struct_metadata(cx: &CrateContext,
 
 // Creates MemberDescriptions for the fields of a tuple
 struct TupleMemberDescriptionFactory {
-    component_types: Vec<ty::t> ,
+    component_types: Vec<Ty> ,
     span: Span,
 }
 
@@ -2042,8 +2042,8 @@ impl TupleMemberDescriptionFactory {
 }
 
 fn prepare_tuple_metadata(cx: &CrateContext,
-                          tuple_type: ty::t,
-                          component_types: &[ty::t],
+                          tuple_type: Ty,
+                          component_types: &[Ty],
                           unique_type_id: UniqueTypeId,
                           span: Span)
                        -> RecursiveTypeDescription {
@@ -2078,7 +2078,7 @@ fn prepare_tuple_metadata(cx: &CrateContext,
 // will produce one MemberDescription (all with no name and a fixed offset of
 // zero bytes).
 struct EnumMemberDescriptionFactory {
-    enum_type: ty::t,
+    enum_type: Ty,
     type_rep: Rc<adt::Repr>,
     variants: Rc<Vec<Rc<ty::VariantInfo>>>,
     discriminant_type_metadata: Option<DIType>,
@@ -2280,7 +2280,7 @@ impl EnumMemberDescriptionFactory {
 
 // Creates MemberDescriptions for the fields of a single enum variant.
 struct VariantMemberDescriptionFactory {
-    args: Vec<(String, ty::t)> ,
+    args: Vec<(String, Ty)> ,
     discriminant_type_metadata: Option<DIType>,
     span: Span,
 }
@@ -2313,7 +2313,7 @@ enum EnumDiscriminantInfo {
 // descriptions of the fields of the variant. This is a rudimentary version of a
 // full RecursiveTypeDescription.
 fn describe_enum_variant(cx: &CrateContext,
-                         enum_type: ty::t,
+                         enum_type: Ty,
                          struct_def: &adt::Struct,
                          variant_info: &ty::VariantInfo,
                          discriminant_info: EnumDiscriminantInfo,
@@ -2362,7 +2362,7 @@ fn describe_enum_variant(cx: &CrateContext,
     };
 
     // Build an array of (field name, field type) pairs to be captured in the factory closure.
-    let args: Vec<(String, ty::t)> = arg_names.iter()
+    let args: Vec<(String, Ty)> = arg_names.iter()
         .zip(struct_def.fields.iter())
         .map(|(s, &t)| (s.to_string(), t))
         .collect();
@@ -2383,7 +2383,7 @@ fn describe_enum_variant(cx: &CrateContext,
 }
 
 fn prepare_enum_metadata(cx: &CrateContext,
-                         enum_type: ty::t,
+                         enum_type: Ty,
                          enum_def_id: ast::DefId,
                          unique_type_id: UniqueTypeId,
                          span: Span)
@@ -2670,7 +2670,7 @@ fn create_struct_stub(cx: &CrateContext,
 
 fn fixed_vec_metadata(cx: &CrateContext,
                       unique_type_id: UniqueTypeId,
-                      element_type: ty::t,
+                      element_type: Ty,
                       len: uint,
                       span: Span)
                    -> MetadataCreationResult {
@@ -2702,8 +2702,8 @@ fn fixed_vec_metadata(cx: &CrateContext,
 }
 
 fn vec_slice_metadata(cx: &CrateContext,
-                      vec_type: ty::t,
-                      element_type: ty::t,
+                      vec_type: Ty,
+                      element_type: Ty,
                       unique_type_id: UniqueTypeId,
                       span: Span)
                    -> MetadataCreationResult {
@@ -2757,7 +2757,7 @@ fn vec_slice_metadata(cx: &CrateContext,
 
     fn slice_layout_is_correct(cx: &CrateContext,
                                member_llvm_types: &[Type],
-                               element_type: ty::t)
+                               element_type: Ty)
                             -> bool {
         member_llvm_types.len() == 2 &&
         member_llvm_types[0] == type_of::type_of(cx, element_type).ptr_to() &&
@@ -2805,8 +2805,8 @@ fn subroutine_type_metadata(cx: &CrateContext,
 // of a DST struct, there is no trait_object_type and the results of this
 // function will be a little bit weird.
 fn trait_pointer_metadata(cx: &CrateContext,
-                          trait_type: ty::t,
-                          trait_object_type: Option<ty::t>,
+                          trait_type: Ty,
+                          trait_object_type: Option<Ty>,
                           unique_type_id: UniqueTypeId)
                        -> DIType {
     // The implementation provided here is a stub. It makes sure that the trait
@@ -2842,7 +2842,7 @@ fn trait_pointer_metadata(cx: &CrateContext,
 }
 
 fn type_metadata(cx: &CrateContext,
-                 t: ty::t,
+                 t: Ty,
                  usage_site_span: Span)
               -> DIType {
     // Get the unique type id of this type.
@@ -2855,7 +2855,7 @@ fn type_metadata(cx: &CrateContext,
                 return metadata;
             },
             None => {
-                // The ty::t is not in the TypeMap but maybe we have already seen
+                // The Ty is not in the TypeMap but maybe we have already seen
                 // an equivalent type (e.g. only differing in region arguments).
                 // In order to find out, generate the unique type id and look
                 // that up.
@@ -2863,7 +2863,7 @@ fn type_metadata(cx: &CrateContext,
                 match type_map.find_metadata_for_unique_id(unique_type_id) {
                     Some(metadata) => {
                         // There is already an equivalent type in the TypeMap.
-                        // Register this ty::t as an alias in the cache and
+                        // Register this Ty as an alias in the cache and
                         // return the cached metadata.
                         type_map.register_type_with_metadata(cx, t, metadata);
                         return metadata;
@@ -2977,7 +2977,7 @@ fn type_metadata(cx: &CrateContext,
                     let error_message = format!("Expected type metadata for unique \
                                                  type id '{}' to already be in \
                                                  the debuginfo::TypeMap but it \
-                                                 was not. (ty::t = {})",
+                                                 was not. (Ty = {})",
                                                 unique_type_id_str.as_slice(),
                                                 ppaux::ty_to_string(cx.tcx(), t));
                     cx.sess().span_bug(usage_site_span, error_message.as_slice());
@@ -2989,10 +2989,10 @@ fn type_metadata(cx: &CrateContext,
                     if metadata != metadata_for_uid {
                         let unique_type_id_str =
                             type_map.get_unique_type_id_as_string(unique_type_id);
-                        let error_message = format!("Mismatch between ty::t and \
+                        let error_message = format!("Mismatch between Ty and \
                                                      UniqueTypeId maps in \
                                                      debuginfo::TypeMap. \
-                                                     UniqueTypeId={}, ty::t={}",
+                                                     UniqueTypeId={}, Ty={}",
                             unique_type_id_str.as_slice(),
                             ppaux::ty_to_string(cx.tcx(), t));
                         cx.sess().span_bug(usage_site_span, error_message.as_slice());
@@ -3658,7 +3658,7 @@ fn populate_scope_map(cx: &CrateContext,
 // the work twice. The `qualified` parameter only affects the first level of the
 // type name, further levels (i.e. type parameters) are always fully qualified.
 fn compute_debuginfo_type_name(cx: &CrateContext,
-                               t: ty::t,
+                               t: Ty,
                                qualified: bool)
                             -> String {
     let mut result = String::with_capacity(64);
@@ -3669,7 +3669,7 @@ fn compute_debuginfo_type_name(cx: &CrateContext,
 // Pushes the name of the type as it should be stored in debuginfo on the
 // `output` String. See also compute_debuginfo_type_name().
 fn push_debuginfo_type_name(cx: &CrateContext,
-                            t: ty::t,
+                            t: Ty,
                             qualified: bool,
                             output:&mut String) {
     match ty::get(t).sty {

@@ -22,7 +22,7 @@ use middle::trans::common::{Block, FunctionContext, ExprId, NodeInfo};
 use middle::trans::debuginfo;
 use middle::trans::glue;
 use middle::trans::type_::Type;
-use middle::ty;
+use middle::ty::{mod, Ty};
 use std::fmt;
 use syntax::ast;
 use util::ppaux::Repr;
@@ -302,7 +302,7 @@ impl<'blk, 'tcx> CleanupMethods<'blk, 'tcx> for FunctionContext<'blk, 'tcx> {
     fn schedule_drop_mem(&self,
                          cleanup_scope: ScopeId,
                          val: ValueRef,
-                         ty: ty::t) {
+                         ty: Ty) {
         /*!
          * Schedules a (deep) drop of `val`, which is a pointer to an
          * instance of `ty`
@@ -328,7 +328,7 @@ impl<'blk, 'tcx> CleanupMethods<'blk, 'tcx> for FunctionContext<'blk, 'tcx> {
     fn schedule_drop_and_zero_mem(&self,
                                   cleanup_scope: ScopeId,
                                   val: ValueRef,
-                                  ty: ty::t) {
+                                  ty: Ty) {
         /*!
          * Schedules a (deep) drop and zero-ing of `val`, which is a pointer
          * to an instance of `ty`
@@ -355,7 +355,7 @@ impl<'blk, 'tcx> CleanupMethods<'blk, 'tcx> for FunctionContext<'blk, 'tcx> {
     fn schedule_drop_immediate(&self,
                                cleanup_scope: ScopeId,
                                val: ValueRef,
-                               ty: ty::t) {
+                               ty: Ty) {
         /*!
          * Schedules a (deep) drop of `val`, which is an instance of `ty`
          */
@@ -381,7 +381,7 @@ impl<'blk, 'tcx> CleanupMethods<'blk, 'tcx> for FunctionContext<'blk, 'tcx> {
                            cleanup_scope: ScopeId,
                            val: ValueRef,
                            heap: Heap,
-                           content_ty: ty::t) {
+                           content_ty: Ty) {
         /*!
          * Schedules a call to `free(val)`. Note that this is a shallow
          * operation.
@@ -954,7 +954,7 @@ pub struct DropValue {
     is_immediate: bool,
     must_unwind: bool,
     val: ValueRef,
-    ty: ty::t,
+    ty: Ty,
     zero: bool
 }
 
@@ -995,7 +995,7 @@ pub enum Heap {
 pub struct FreeValue {
     ptr: ValueRef,
     heap: Heap,
-    content_ty: ty::t
+    content_ty: Ty
 }
 
 impl Cleanup for FreeValue {
@@ -1161,20 +1161,20 @@ pub trait CleanupMethods<'blk, 'tcx> {
     fn schedule_drop_mem(&self,
                          cleanup_scope: ScopeId,
                          val: ValueRef,
-                         ty: ty::t);
+                         ty: Ty);
     fn schedule_drop_and_zero_mem(&self,
                                   cleanup_scope: ScopeId,
                                   val: ValueRef,
-                                  ty: ty::t);
+                                  ty: Ty);
     fn schedule_drop_immediate(&self,
                                cleanup_scope: ScopeId,
                                val: ValueRef,
-                               ty: ty::t);
+                               ty: Ty);
     fn schedule_free_value(&self,
                            cleanup_scope: ScopeId,
                            val: ValueRef,
                            heap: Heap,
-                           content_ty: ty::t);
+                           content_ty: Ty);
     fn schedule_free_slice(&self,
                            cleanup_scope: ScopeId,
                            val: ValueRef,

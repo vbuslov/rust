@@ -12,7 +12,7 @@
 use middle::subst;
 use middle::subst::{ParamSpace, Subst, Substs, VecPerParamSpace};
 use middle::typeck::infer::InferCtxt;
-use middle::ty;
+use middle::ty::{mod, Ty};
 use std::collections::HashSet;
 use std::fmt;
 use std::rc::Rc;
@@ -237,7 +237,7 @@ fn push_obligations_for_param_bounds(
 pub fn trait_ref_for_builtin_bound(
     tcx: &ty::ctxt,
     builtin_bound: ty::BuiltinBound,
-    param_ty: ty::t)
+    param_ty: Ty)
     -> Option<Rc<ty::TraitRef>>
 {
     match tcx.lang_items.from_builtin_kind(builtin_bound) {
@@ -259,7 +259,7 @@ pub fn obligation_for_builtin_bound(
     cause: ObligationCause,
     builtin_bound: ty::BuiltinBound,
     recursion_depth: uint,
-    param_ty: ty::t)
+    param_ty: Ty)
     -> Result<Obligation, ErrorReported>
 {
     let trait_ref = trait_ref_for_builtin_bound(tcx, builtin_bound, param_ty);

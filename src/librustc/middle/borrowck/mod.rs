@@ -18,7 +18,7 @@ use middle::dataflow::BitwiseOperator;
 use middle::dataflow::DataFlowOperator;
 use middle::expr_use_visitor as euv;
 use middle::mem_categorization as mc;
-use middle::ty;
+use middle::ty::{mod, Ty};
 use util::ppaux::{note_and_explain_region, Repr, UserString};
 
 use std::rc::Rc;
@@ -577,7 +577,7 @@ impl<'a, 'tcx> BorrowckCtxt<'a, 'tcx> {
             }
         }
 
-        fn move_suggestion(tcx: &ty::ctxt, ty: ty::t, default_msg: &'static str)
+        fn move_suggestion(tcx: &ty::ctxt, ty: Ty, default_msg: &'static str)
                           -> &'static str {
             match ty::get(ty).sty {
                 ty::ty_closure(box ty::ClosureTy {

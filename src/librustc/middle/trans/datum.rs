@@ -22,7 +22,7 @@ use middle::trans::cleanup::CleanupMethods;
 use middle::trans::expr;
 use middle::trans::tvec;
 use middle::trans::type_of;
-use middle::ty;
+use middle::ty::{mod, Ty};
 use util::ppaux::{ty_to_string};
 
 use std::fmt;
@@ -41,7 +41,7 @@ pub struct Datum<K> {
     pub val: ValueRef,
 
     /// The rust type of the value.
-    pub ty: ty::t,
+    pub ty: Ty,
 
     /// Indicates whether this is by-ref or by-value.
     pub kind: K,
@@ -92,20 +92,20 @@ pub enum RvalueMode {
     ByValue,
 }
 
-pub fn immediate_rvalue(val: ValueRef, ty: ty::t) -> Datum<Rvalue> {
+pub fn immediate_rvalue(val: ValueRef, ty: Ty) -> Datum<Rvalue> {
     return Datum::new(val, ty, Rvalue::new(ByValue));
 }
 
 pub fn immediate_rvalue_bcx<'blk, 'tcx>(bcx: Block<'blk, 'tcx>,
                                         val: ValueRef,
-                                        ty: ty::t)
+                                        ty: Ty)
                                         -> DatumBlock<'blk, 'tcx, Rvalue> {
     return DatumBlock::new(bcx, immediate_rvalue(val, ty))
 }
 
 
 pub fn lvalue_scratch_datum<'blk, 'tcx, A>(bcx: Block<'blk, 'tcx>,
-                                           ty: ty::t,
+                                           ty: Ty,
                                            name: &str,
                                            zero: bool,
                                            scope: cleanup::ScopeId,
@@ -138,7 +138,7 @@ pub fn lvalue_scratch_datum<'blk, 'tcx, A>(bcx: Block<'blk, 'tcx>,
 }
 
 pub fn rvalue_scratch_datum(bcx: Block,
-                            ty: ty::t,
+                            ty: Ty,
                             name: &str)
                             -> Datum<Rvalue> {
     /*!
@@ -156,7 +156,7 @@ pub fn rvalue_scratch_datum(bcx: Block,
     Datum::new(scratch, ty, Rvalue::new(ByRef))
 }
 
-pub fn appropriate_rvalue_mode(ccx: &CrateContext, ty: ty::t) -> RvalueMode {
+pub fn appropriate_rvalue_mode(ccx: &CrateContext, ty: Ty) -> RvalueMode {
     /*!
      * Indicates the "appropriate" mode for this value,
      * which is either by ref or by value, depending
@@ -174,7 +174,7 @@ fn add_rvalue_clean(mode: RvalueMode,
                     fcx: &FunctionContext,
                     scope: cleanup::ScopeId,
                     val: ValueRef,
-                    ty: ty::t) {
+                    ty: Ty) {
     match mode {
         ByValue => { fcx.schedule_drop_immediate(scope, val, ty); }
         ByRef => {
@@ -193,7 +193,7 @@ pub trait KindOps {
     fn post_store<'blk, 'tcx>(&self,
                               bcx: Block<'blk, 'tcx>,
                               val: ValueRef,
-                              ty: ty::t)
+                              ty: Ty)
                               -> Block<'blk, 'tcx>;
 
     /**
@@ -213,7 +213,7 @@ impl KindOps for Rvalue {
     fn post_store<'blk, 'tcx>(&self,
                               bcx: Block<'blk, 'tcx>,
                               _val: ValueRef,
-                              _ty: ty::t)
+                              _ty: Ty)
                               -> Block<'blk, 'tcx> {
         // No cleanup is scheduled for an rvalue, so we don't have
         // to do anything after a move to cancel or duplicate it.
@@ -233,7 +233,7 @@ impl KindOps for Lvalue {
     fn post_store<'blk, 'tcx>(&self,
                               bcx: Block<'blk, 'tcx>,
                               val: ValueRef,
-                              ty: ty::t)
+                              ty: Ty)
                               -> Block<'blk, 'tcx> {
         /*!
          * If an lvalue is moved, we must zero out the memory in which
@@ -263,7 +263,7 @@ impl KindOps for Expr {
     fn post_store<'blk, 'tcx>(&self,
                               bcx: Block<'blk, 'tcx>,
                               val: ValueRef,
-                              ty: ty::t)
+                              ty: Ty)
                               -> Block<'blk, 'tcx> {
         match *self {
             LvalueExpr => Lvalue.post_store(bcx, val, ty),
@@ -512,7 +512,7 @@ impl Datum<Lvalue> {
     // datum may also be unsized _without the size information_. It is the
     // callers responsibility to package the result in some way to make a valid
     // datum in that case (e.g., by making a fat pointer or opened pair).
-    pub fn get_element(&self, bcx: Block, ty: ty::t,
+    pub fn get_element(&self, bcx: Block, ty: Ty,
                        gep: |ValueRef| -> ValueRef)
                        -> Datum<Lvalue> {
         let val = match ty::get(self.ty).sty {
@@ -543,7 +543,7 @@ impl Datum<Lvalue> {
  * Generic methods applicable to any sort of datum.
  */
 impl<K: KindOps + fmt::Show> Datum<K> {
-    pub fn new(val: ValueRef, ty: ty::t, kind: K) -> Datum<K> {
+    pub fn new(val: ValueRef, ty: Ty, kind: K) -> Datum<K> {
         Datum { val: val, ty: ty, kind: kind }
     }
 
