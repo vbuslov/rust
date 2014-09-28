@@ -229,32 +229,6 @@ pub struct creader_cache_key {
 
 pub type creader_cache = RefCell<HashMap<creader_cache_key, Ty>>;
 
-pub struct intern_key {
-    sty: *const sty,
-}
-
-// NB: Do not replace this with #[deriving(PartialEq)]. The automatically-derived
-// implementation will not recurse through sty and you will get stack
-// exhaustion.
-impl cmp::PartialEq for intern_key {
-    fn eq(&self, other: &intern_key) -> bool {
-        unsafe {
-            *self.sty == *other.sty
-        }
-    }
-    fn ne(&self, other: &intern_key) -> bool {
-        !self.eq(other)
-    }
-}
-
-impl Eq for intern_key {}
-
-impl<W:Writer> Hash<W> for intern_key {
-    fn hash(&self, s: &mut W) {
-        unsafe { (*self.sty).hash(s) }
-    }
-}
-
 pub enum ast_ty_to_ty_cache_entry {
     atttce_unresolved,  /* not resolved yet */
     atttce_resolved(Ty)  /* resolved to a type, irrespective of region */
@@ -433,11 +407,13 @@ pub struct TransmuteRestriction {
 /// later on.
 pub struct ctxt<'tcx> {
     /// The arena that types are allocated from.
-    type_arena: &'tcx TypedArena<t_box_>,
+    type_arena: &'tcx TypedArena<TyS>,
 
     /// Specifically use a speedy hash algorithm for this hash map, it's used
     /// quite often.
-    interner: RefCell<FnvHashMap<intern_key, &'tcx t_box_>>,
+    // TODO(eddyb) use a FnvHashSet<InternedTy<'tcx>> when equivalent keys can
+    // queried from a HashSet.
+    interner: RefCell<FnvHashMap<InternedTy<'tcx>, Ty<'tcx>>>,
     pub next_id: Cell<uint>,
     pub sess: Session,
     pub def_map: resolve::DefMap,
@@ -602,10 +578,8 @@ bitflags! {
     }
 }
 
-pub type t_box = &'static t_box_;
-
 #[deriving(Show)]
-pub struct t_box_ {
+pub struct TyS {
     pub sty: sty,
     pub id: uint,
     pub flags: TypeFlags,
@@ -617,32 +591,52 @@ impl fmt::Show for TypeFlags {
     }
 }
 
-// To reduce refcounting cost, we're representing types as unsafe pointers
-// throughout the compiler. These are simply casted t_box values. Use ty::get
-// to cast them back to a box. (Without the cast, compiler performance suffers
-// ~15%.) This does mean that a Ty value relies on the ctxt to keep its box
-// alive, and using ty::get is unsafe when the ctxt is no longer alive.
-enum t_opaque {}
+impl PartialEq for TyS {
+    fn eq(&self, other: &TyS) -> bool {
+        (self as *const _) == (other as *const _)
+    }
+}
+impl Eq for TyS {}
 
-#[allow(raw_pointer_deriving)]
-#[deriving(Clone, PartialEq, Eq, Hash)]
-pub struct Ty { inner: *const t_opaque }
-
-impl fmt::Show for Ty {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", get(*self))
+impl<S: Writer> Hash<S> for TyS {
+    fn hash(&self, s: &mut S) {
+        (self as *const _).hash(s)
     }
 }
 
-pub fn get(ty: Ty) -> t_box {
-    unsafe {
-        let t2: t_box = mem::transmute(ty);
-        t2
+pub type Ty<'tcx> = &'tcx TyS;
+
+/// An entry in the type interner.
+struct InternedTy<'tcx> {
+    ty: Ty<'tcx>
+}
+
+// NB: An InternedTy compares and hashes as a sty.
+impl<'tcx> PartialEq for InternedTy<'tcx> {
+    fn eq(&self, other: &InternedTy<'tcx>) -> bool {
+        self.ty.sty == other.ty.sty
+    }
+}
+impl<'tcx> Eq for InternedTy<'tcx> {}
+
+impl<'tcx> Equiv<InternedTy<'tcx>> for sty<'tcx> {
+    fn equiv(&self, other: &InternedTy<'tcx>) -> bool {
+        *self == other.ty.sty
     }
 }
 
-fn tbox_has_flag(tb: t_box, flag: TypeFlags) -> bool {
-    tb.flags.intersects(flag)
+impl<'tcx, S: Writer> Hash<S> for InternedTy<'tcx> {
+    fn hash(&self, s: &mut S) {
+        self.ty.sty.hash(s)
+    }
+}
+
+pub fn get(ty: Ty) -> Ty {
+    ty
+}
+
+fn tbox_has_flag(ty: Ty, flag: TypeFlags) -> bool {
+    ty.flags.intersects(flag)
 }
 pub fn type_has_params(ty: Ty) -> bool {
     tbox_has_flag(get(ty), HAS_PARAMS)
@@ -657,6 +651,7 @@ pub fn type_needs_infer(ty: Ty) -> bool {
     tbox_has_flag(get(ty), HAS_TY_INFER | HAS_RE_INFER)
 }
 pub fn type_id(ty: Ty) -> uint { get(ty).id }
+
 
 #[deriving(Clone, PartialEq, Eq, Hash, Show)]
 pub struct BareFnTy {
@@ -907,13 +902,13 @@ pub enum BoundRegion {
 }
 
 mod primitives {
-    use super::t_box_;
+    use super::TyS;
 
     use syntax::ast;
 
     macro_rules! def_prim_ty(
         ($name:ident, $sty:expr, $id:expr) => (
-            pub static $name: t_box_ = t_box_ {
+            pub static $name: TyS = TyS {
                 sty: $sty,
                 id: $id,
                 flags: super::NO_TYPE_FLAGS,
@@ -937,7 +932,7 @@ mod primitives {
     def_prim_ty!(TY_F32,    super::ty_float(ast::TyF32),    14)
     def_prim_ty!(TY_F64,    super::ty_float(ast::TyF64),    15)
 
-    pub static TY_ERR: t_box_ = t_box_ {
+    pub static TY_ERR: TyS = TyS {
         sty: super::ty_err,
         id: 17,
         flags: super::HAS_TY_ERR,
@@ -1504,7 +1499,7 @@ impl UnboxedClosureKind {
 }
 
 pub fn mk_ctxt<'tcx>(s: Session,
-                     type_arena: &'tcx TypedArena<t_box_>,
+                     type_arena: &'tcx TypedArena<TyS>,
                      dm: resolve::DefMap,
                      named_region_map: resolve_lifetime::NamedRegionMap,
                      map: ast_map::Map<'tcx>,
@@ -1591,10 +1586,8 @@ pub fn mk_t(cx: &ctxt, st: sty) -> Ty {
         _ => {}
     };
 
-    let key = intern_key { sty: &st };
-
-    match cx.interner.borrow().find(&key) {
-        Some(ty) => unsafe { return mem::transmute(&ty.sty); },
+    match cx.interner.borrow().find_equiv(&st) {
+        Some(ty) => return ty,
         _ => ()
     }
 
@@ -1688,32 +1681,22 @@ pub fn mk_t(cx: &ctxt, st: sty) -> Ty {
       }
     }
 
-    let ty = cx.type_arena.alloc(t_box_ {
+    let ty = cx.type_arena.alloc(TyS {
         sty: st,
         id: cx.next_id.get(),
         flags: flags,
     });
 
-    let sty_ptr = &ty.sty as *const sty;
-
-    let key = intern_key {
-        sty: sty_ptr,
-    };
-
-    cx.interner.borrow_mut().insert(key, ty);
+    cx.interner.borrow_mut().insert(InternedTy { ty: ty }, ty);
 
     cx.next_id.set(cx.next_id.get() + 1);
 
-    unsafe {
-        mem::transmute::<*const sty, Ty>(sty_ptr)
-    }
+    Ty { inner: ty }
 }
 
 #[inline]
-pub fn mk_prim_t(primitive: &'static t_box_) -> Ty {
-    unsafe {
-        mem::transmute::<&'static t_box_, Ty>(primitive)
-    }
+pub fn mk_prim_t(primitive: &'static TyS) -> Ty {
+    Ty { inner: primitive }
 }
 
 #[inline]
