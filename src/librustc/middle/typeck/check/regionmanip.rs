@@ -23,13 +23,13 @@ use util::ppaux::Repr;
 
 // Helper functions related to manipulating region types.
 
-pub fn replace_late_bound_regions<T>(
-    tcx: &ty::ctxt,
+pub fn replace_late_bound_regions<'tcx, T>(
+    tcx: &ty::ctxt<'tcx>,
     binder_id: ast::NodeId,
     value: &T,
     map_fn: |ty::BoundRegion| -> ty::Region)
     -> (HashMap<ty::BoundRegion,ty::Region>, T)
-    where T : TypeFoldable + Repr
+    where T : TypeFoldable<'tcx> + Repr<'tcx>
 {
     debug!("replace_late_bound_regions(binder_id={}, value={})",
            binder_id, value.repr(tcx));
@@ -53,22 +53,22 @@ pub fn replace_late_bound_regions<T>(
     (map, new_value)
 }
 
-pub enum WfConstraint {
-    RegionSubRegionConstraint(Option<Ty>, ty::Region, ty::Region),
-    RegionSubParamConstraint(Option<Ty>, ty::Region, ty::ParamTy),
+pub enum WfConstraint<'tcx> {
+    RegionSubRegionConstraint(Option<Ty<'tcx>>, ty::Region, ty::Region),
+    RegionSubParamConstraint(Option<Ty<'tcx>>, ty::Region, ty::ParamTy),
 }
 
 struct Wf<'a, 'tcx: 'a> {
     tcx: &'a ty::ctxt<'tcx>,
-    stack: Vec<(ty::Region, Option<Ty>)>,
-    out: Vec<WfConstraint>,
+    stack: Vec<(ty::Region, Option<Ty<'tcx>>)>,
+    out: Vec<WfConstraint<'tcx>>,
 }
 
-pub fn region_wf_constraints(
-    tcx: &ty::ctxt,
-    ty: Ty,
+pub fn region_wf_constraints<'tcx>(
+    tcx: &ty::ctxt<'tcx>,
+    ty: Ty<'tcx>,
     outer_region: ty::Region)
-    -> Vec<WfConstraint>
+    -> Vec<WfConstraint<'tcx>>
 {
     /*!
      * This routine computes the well-formedness constraints that must
@@ -86,7 +86,7 @@ pub fn region_wf_constraints(
 }
 
 impl<'a, 'tcx> Wf<'a, 'tcx> {
-    fn accumulate_from_ty(&mut self, ty: Ty) {
+    fn accumulate_from_ty(&mut self, ty: Ty<'tcx>) {
         debug!("Wf::accumulate_from_ty(ty={})",
                ty.repr(self.tcx));
 
@@ -178,9 +178,9 @@ impl<'a, 'tcx> Wf<'a, 'tcx> {
     }
 
     fn accumulate_from_rptr(&mut self,
-                            ty: Ty,
+                            ty: Ty<'tcx>,
                             r_b: ty::Region,
-                            ty_b: Ty) {
+                            ty_b: Ty<'tcx>) {
         // We are walking down a type like this, and current
         // position is indicated by caret:
         //
@@ -225,7 +225,7 @@ impl<'a, 'tcx> Wf<'a, 'tcx> {
     }
 
     fn push_sub_region_constraint(&mut self,
-                                  opt_ty: Option<Ty>,
+                                  opt_ty: Option<Ty<'tcx>>,
                                   r_a: ty::Region,
                                   r_b: ty::Region) {
         /*! Pushes a constraint that `r_a <= r_b`, due to `opt_ty` */
@@ -245,16 +245,16 @@ impl<'a, 'tcx> Wf<'a, 'tcx> {
 
     fn push_param_constraint(&mut self,
                              region: ty::Region,
-                             opt_ty: Option<Ty>,
+                             opt_ty: Option<Ty<'tcx>>,
                              param_ty: ty::ParamTy) {
         /*! Pushes a constraint that `region <= param_ty`, due to `opt_ty` */
         self.out.push(RegionSubParamConstraint(opt_ty, region, param_ty));
     }
 
     fn accumulate_from_adt(&mut self,
-                           ty: Ty,
+                           ty: Ty<'tcx>,
                            def_id: ast::DefId,
-                           substs: &Substs)
+                           substs: &Substs<'tcx>)
     {
         // The generic declarations from the type, appropriately
         // substituted for the actual substitutions.
@@ -354,8 +354,8 @@ impl<'a, 'tcx> Wf<'a, 'tcx> {
     }
 
     fn accumulate_from_closure_ty(&mut self,
-                                  ty: Ty,
-                                  c: &ty::ClosureTy)
+                                  ty: Ty<'tcx>,
+                                  c: &ty::ClosureTy<'tcx>)
     {
         match c.store {
             ty::RegionTraitStore(r_b, _) => {
@@ -368,7 +368,7 @@ impl<'a, 'tcx> Wf<'a, 'tcx> {
     }
 
     fn accumulate_from_object_ty(&mut self,
-                                 ty: Ty,
+                                 ty: Ty<'tcx>,
                                  bounds: &ty::ExistentialBounds)
     {
         // Imagine a type like this:

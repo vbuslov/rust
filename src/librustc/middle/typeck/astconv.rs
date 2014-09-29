@@ -75,26 +75,26 @@ use syntax::print::pprust;
 
 pub trait AstConv<'tcx> {
     fn tcx<'a>(&'a self) -> &'a ty::ctxt<'tcx>;
-    fn get_item_ty(&self, id: ast::DefId) -> ty::Polytype;
-    fn get_trait_def(&self, id: ast::DefId) -> Rc<ty::TraitDef>;
+    fn get_item_ty(&self, id: ast::DefId) -> ty::Polytype<'tcx>;
+    fn get_trait_def(&self, id: ast::DefId) -> Rc<ty::TraitDef<'tcx>>;
 
     /// What type should we use when a type is omitted?
-    fn ty_infer(&self, span: Span) -> Ty;
+    fn ty_infer(&self, span: Span) -> Ty<'tcx>;
 
     /// Returns true if associated types from the given trait and type are
     /// allowed to be used here and false otherwise.
     fn associated_types_of_trait_are_valid(&self,
-                                           ty: Ty,
+                                           ty: Ty<'tcx>,
                                            trait_id: ast::DefId)
                                            -> bool;
 
     /// Returns the binding of the given associated type for some type.
     fn associated_type_binding(&self,
                                span: Span,
-                               ty: Option<Ty>,
+                               ty: Option<Ty<'tcx>>,
                                trait_id: ast::DefId,
                                associated_type_id: ast::DefId)
-                               -> Ty;
+                               -> Ty<'tcx>;
 }
 
 pub fn ast_region_to_region(tcx: &ty::ctxt, lifetime: &ast::Lifetime)
@@ -210,11 +210,11 @@ fn ast_path_substs<'tcx,AC,RS>(
                    this: &AC,
                    rscope: &RS,
                    decl_def_id: ast::DefId,
-                   decl_generics: &ty::Generics,
-                   self_ty: Option<Ty>,
-                   associated_ty: Option<Ty>,
+                   decl_generics: &ty::Generics<'tcx>,
+                   self_ty: Option<Ty<'tcx>>,
+                   associated_ty: Option<Ty<'tcx>>,
                    path: &ast::Path)
-                   -> Substs
+                   -> Substs<'tcx>
                    where AC: AstConv<'tcx>, RS: RegionScope {
     /*!
      * Given a path `path` that refers to an item `I` with the
@@ -355,10 +355,10 @@ fn ast_path_substs<'tcx,AC,RS>(
 pub fn ast_path_to_trait_ref<'tcx,AC,RS>(this: &AC,
                                          rscope: &RS,
                                          trait_def_id: ast::DefId,
-                                         self_ty: Option<Ty>,
-                                         associated_type: Option<Ty>,
+                                         self_ty: Option<Ty<'tcx>>,
+                                         associated_type: Option<Ty<'tcx>>,
                                          path: &ast::Path)
-                                         -> Rc<ty::TraitRef>
+                                         -> Rc<ty::TraitRef<'tcx>>
                                          where AC: AstConv<'tcx>,
                                                RS: RegionScope {
     let trait_def = this.get_trait_def(trait_def_id);
@@ -379,7 +379,7 @@ pub fn ast_path_to_ty<'tcx, AC: AstConv<'tcx>, RS: RegionScope>(
     rscope: &RS,
     did: ast::DefId,
     path: &ast::Path)
-    -> TypeAndSubsts {
+    -> TypeAndSubsts<'tcx> {
     let tcx = this.tcx();
     let ty::Polytype {
         generics,
@@ -408,7 +408,7 @@ pub fn ast_path_to_ty_relaxed<'tcx, AC: AstConv<'tcx>,
                               rscope: &RS,
                               did: ast::DefId,
                               path: &ast::Path)
-                              -> TypeAndSubsts {
+                              -> TypeAndSubsts<'tcx> {
     let tcx = this.tcx();
     let ty::Polytype {
         generics,
@@ -459,7 +459,8 @@ fn check_path_args(tcx: &ty::ctxt,
     }
 }
 
-pub fn ast_ty_to_prim_ty(tcx: &ty::ctxt, ast_ty: &ast::Ty) -> Option<Ty> {
+pub fn ast_ty_to_prim_ty<'tcx>(tcx: &ty::ctxt<'tcx>, ast_ty: &ast::Ty)
+                               -> Option<Ty<'tcx>> {
     match ast_ty.node {
         ast::TyPath(ref path, _, id) => {
             let a_def = match tcx.def_map.borrow().find(&id) {
@@ -511,7 +512,7 @@ pub fn ast_ty_to_builtin_ty<'tcx, AC: AstConv<'tcx>, RS: RegionScope>(
         this: &AC,
         rscope: &RS,
         ast_ty: &ast::Ty)
-        -> Option<Ty> {
+        -> Option<Ty<'tcx>> {
     match ast_ty_to_prim_ty(this.tcx(), ast_ty) {
         Some(typ) => return Some(typ),
         None => {}
@@ -585,8 +586,8 @@ pub fn trait_ref_for_unboxed_function<'tcx, AC: AstConv<'tcx>,
                                       rscope: &RS,
                                       kind: ast::UnboxedClosureKind,
                                       decl: &ast::FnDecl,
-                                      self_ty: Option<Ty>)
-                                      -> ty::TraitRef {
+                                      self_ty: Option<Ty<'tcx>>)
+                                      -> ty::TraitRef<'tcx> {
     let lang_item = match kind {
         ast::FnUnboxedClosureKind => FnTraitLangItem,
         ast::FnMutUnboxedClosureKind => FnMutTraitLangItem,
@@ -627,8 +628,8 @@ fn mk_pointer<'tcx, AC: AstConv<'tcx>, RS: RegionScope>(
         a_seq_mutbl: ast::Mutability,
         a_seq_ty: &ast::Ty,
         ptr_ty: PointerTy,
-        constr: |Ty| -> Ty)
-        -> Ty {
+        constr: |Ty<'tcx>| -> Ty<'tcx>)
+        -> Ty<'tcx> {
     let tcx = this.tcx();
     debug!("mk_pointer(ptr_ty={})", ptr_ty);
 
@@ -729,7 +730,7 @@ fn associated_ty_to_ty<'tcx,AC,RS>(this: &AC,
                                    for_ast_type: &ast::Ty,
                                    trait_type_id: ast::DefId,
                                    span: Span)
-                                   -> Ty
+                                   -> Ty<'tcx>
                                    where AC: AstConv<'tcx>, RS: RegionScope {
     // Find the trait that this associated type belongs to.
     let trait_did = match ty::impl_or_trait_item(this.tcx(),
@@ -772,7 +773,7 @@ fn associated_ty_to_ty<'tcx,AC,RS>(this: &AC,
 // Parses the programmer's textual representation of a type into our
 // internal notion of a type.
 pub fn ast_ty_to_ty<'tcx, AC: AstConv<'tcx>, RS: RegionScope>(
-        this: &AC, rscope: &RS, ast_ty: &ast::Ty) -> Ty {
+        this: &AC, rscope: &RS, ast_ty: &ast::Ty) -> Ty<'tcx> {
 
     let tcx = this.tcx();
 
@@ -1030,8 +1031,8 @@ pub fn ast_ty_to_ty<'tcx, AC: AstConv<'tcx>, RS: RegionScope>(
 
 pub fn ty_of_arg<'tcx, AC: AstConv<'tcx>, RS: RegionScope>(this: &AC, rscope: &RS,
                                                            a: &ast::Arg,
-                                                           expected_ty: Option<Ty>)
-                                                           -> Ty {
+                                                           expected_ty: Option<Ty<'tcx>>)
+                                                           -> Ty<'tcx> {
     match a.ty.node {
         ast::TyInfer if expected_ty.is_some() => expected_ty.unwrap(),
         ast::TyInfer => this.ty_infer(a.ty.span),
@@ -1039,8 +1040,8 @@ pub fn ty_of_arg<'tcx, AC: AstConv<'tcx>, RS: RegionScope>(this: &AC, rscope: &R
     }
 }
 
-struct SelfInfo<'a> {
-    untransformed_self_ty: Ty,
+struct SelfInfo<'a, 'tcx> {
+    untransformed_self_ty: Ty<'tcx>,
     explicit_self: &'a ast::ExplicitSelf,
 }
 
@@ -1048,11 +1049,11 @@ pub fn ty_of_method<'tcx, AC: AstConv<'tcx>>(
                     this: &AC,
                     id: ast::NodeId,
                     fn_style: ast::FnStyle,
-                    untransformed_self_ty: Ty,
+                    untransformed_self_ty: Ty<'tcx>,
                     explicit_self: &ast::ExplicitSelf,
                     decl: &ast::FnDecl,
                     abi: abi::Abi)
-                    -> (ty::BareFnTy, ty::ExplicitSelfCategory) {
+                    -> (ty::BareFnTy<'tcx>, ty::ExplicitSelfCategory) {
     let self_info = Some(SelfInfo {
         untransformed_self_ty: untransformed_self_ty,
         explicit_self: explicit_self,
@@ -1069,20 +1070,21 @@ pub fn ty_of_method<'tcx, AC: AstConv<'tcx>>(
 
 pub fn ty_of_bare_fn<'tcx, AC: AstConv<'tcx>>(this: &AC, id: ast::NodeId,
                                               fn_style: ast::FnStyle, abi: abi::Abi,
-                                              decl: &ast::FnDecl) -> ty::BareFnTy {
+                                              decl: &ast::FnDecl)
+                                              -> ty::BareFnTy<'tcx> {
     let (bare_fn_ty, _) =
         ty_of_method_or_bare_fn(this, id, fn_style, abi, None, decl);
     bare_fn_ty
 }
 
-fn ty_of_method_or_bare_fn<'tcx, AC: AstConv<'tcx>>(
+fn ty_of_method_or_bare_fn<'a, 'tcx, AC: AstConv<'tcx>>(
                            this: &AC,
                            id: ast::NodeId,
                            fn_style: ast::FnStyle,
                            abi: abi::Abi,
-                           opt_self_info: Option<SelfInfo>,
+                           opt_self_info: Option<SelfInfo<'a, 'tcx>>,
                            decl: &ast::FnDecl)
-                           -> (ty::BareFnTy,
+                           -> (ty::BareFnTy<'tcx>,
                                Option<ty::ExplicitSelfCategory>) {
     debug!("ty_of_method_or_bare_fn");
 
@@ -1200,11 +1202,11 @@ fn ty_of_method_or_bare_fn<'tcx, AC: AstConv<'tcx>>(
     }, explicit_self_category_result)
 }
 
-fn determine_explicit_self_category<'tcx, AC: AstConv<'tcx>,
+fn determine_explicit_self_category<'a, 'tcx, AC: AstConv<'tcx>,
                                     RS:RegionScope>(
                                     this: &AC,
                                     rscope: &RS,
-                                    self_info: &SelfInfo)
+                                    self_info: &SelfInfo<'a, 'tcx>)
                                     -> ty::ExplicitSelfCategory {
     match self_info.explicit_self.node {
         ast::SelfStatic => ty::StaticExplicitSelfCategory,
@@ -1284,8 +1286,8 @@ pub fn ty_of_closure<'tcx, AC: AstConv<'tcx>>(
     store: ty::TraitStore,
     decl: &ast::FnDecl,
     abi: abi::Abi,
-    expected_sig: Option<ty::FnSig>)
-    -> ty::ClosureTy
+    expected_sig: Option<ty::FnSig<'tcx>>)
+    -> ty::ClosureTy<'tcx>
 {
     debug!("ty_of_fn_decl");
 
@@ -1332,7 +1334,7 @@ pub fn conv_existential_bounds<'tcx, AC: AstConv<'tcx>, RS:RegionScope>(
     this: &AC,
     rscope: &RS,
     span: Span,
-    main_trait_refs: &[Rc<ty::TraitRef>],
+    main_trait_refs: &[Rc<ty::TraitRef<'tcx>>],
     ast_bounds: &[ast::TyParamBound])
     -> ty::ExistentialBounds
 {
@@ -1399,12 +1401,12 @@ pub fn conv_existential_bounds<'tcx, AC: AstConv<'tcx>, RS:RegionScope>(
     }
 }
 
-pub fn compute_opt_region_bound(tcx: &ty::ctxt,
-                                span: Span,
-                                builtin_bounds: ty::BuiltinBounds,
-                                region_bounds: &[&ast::Lifetime],
-                                trait_bounds: &[Rc<ty::TraitRef>])
-                                -> Option<ty::Region>
+pub fn compute_opt_region_bound<'tcx>(tcx: &ty::ctxt<'tcx>,
+                                      span: Span,
+                                      builtin_bounds: ty::BuiltinBounds,
+                                      region_bounds: &[&ast::Lifetime],
+                                      trait_bounds: &[Rc<ty::TraitRef<'tcx>>])
+                                      -> Option<ty::Region>
 {
     /*!
      * Given the bounds on a type parameter / existential type,
@@ -1468,7 +1470,7 @@ fn compute_region_bound<'tcx, AC: AstConv<'tcx>, RS:RegionScope>(
     span: Span,
     builtin_bounds: ty::BuiltinBounds,
     region_bounds: &[&ast::Lifetime],
-    trait_bounds: &[Rc<ty::TraitRef>])
+    trait_bounds: &[Rc<ty::TraitRef<'tcx>>])
     -> ty::Region
 {
     /*!

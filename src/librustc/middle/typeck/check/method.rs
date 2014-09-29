@@ -128,7 +128,7 @@ pub enum MethodError {
     Ambiguity(Vec<CandidateSource>),
 }
 
-pub type MethodResult = Result<MethodCallee, MethodError>;
+pub type MethodResult<'tcx> = Result<MethodCallee<'tcx>, MethodError>;
 
 pub fn lookup<'a, 'tcx>(
     fcx: &'a FnCtxt<'a, 'tcx>,
@@ -137,12 +137,12 @@ pub fn lookup<'a, 'tcx>(
     expr: &ast::Expr,                   // The expression `a.b(...)`.
     self_expr: &'a ast::Expr,           // The expression `a`.
     m_name: ast::Name,                  // The name `b`.
-    self_ty: Ty,                        // The type of `a`.
-    supplied_tps: &'a [Ty],             // The list of types X, Y, ... .
+    self_ty: Ty<'tcx>,                  // The type of `a`.
+    supplied_tps: &'a [Ty<'tcx>],       // The list of types X, Y, ... .
     deref_args: check::DerefArgs,       // Whether we autopointer first.
     check_traits: CheckTraitsFlag,      // Whether we check traits only.
     autoderef_receiver: AutoderefReceiverFlag)
-    -> MethodResult
+    -> MethodResult<'tcx>
 {
     let mut lcx = LookupContext {
         fcx: fcx,
@@ -179,9 +179,9 @@ pub fn lookup_in_trait<'a, 'tcx>(
     self_expr: Option<&'a ast::Expr>,   // The expression `a`, if available.
     m_name: ast::Name,                  // The name `b`.
     trait_did: DefId,                   // The trait to limit the lookup to.
-    self_ty: Ty,                        // The type of `a`.
-    supplied_tps: &'a [Ty])             // The list of types X, Y, ... .
-    -> Option<MethodCallee>
+    self_ty: Ty<'tcx>,                  // The type of `a`.
+    supplied_tps: &'a [Ty<'tcx>])       // The list of types X, Y, ... .
+    -> Option<MethodCallee<'tcx>>
 {
     let mut lcx = LookupContext {
         fcx: fcx,
@@ -215,11 +215,11 @@ pub fn lookup_in_trait<'a, 'tcx>(
     }
 }
 
-pub fn report_error(fcx: &FnCtxt,
-                    span: Span,
-                    rcvr_ty: Ty,
-                    method_name: ast::Name,
-                    error: MethodError)
+pub fn report_error<'a, 'tcx>(fcx: &FnCtxt<'a, 'tcx>,
+                              span: Span,
+                              rcvr_ty: Ty<'tcx>,
+                              method_name: ast::Name,
+                              error: MethodError)
 {
     match error {
         NoMatch(static_sources) => {
@@ -317,10 +317,10 @@ pub fn report_error(fcx: &FnCtxt,
 
 // Determine the index of a method in the list of all methods belonging
 // to a trait and its supertraits.
-fn get_method_index(tcx: &ty::ctxt,
-                    trait_ref: &TraitRef,
-                    subtrait: Rc<TraitRef>,
-                    n_method: uint) -> uint {
+fn get_method_index<'tcx>(tcx: &ty::ctxt<'tcx>,
+                          trait_ref: &TraitRef<'tcx>,
+                          subtrait: Rc<TraitRef<'tcx>>,
+                          n_method: uint) -> uint {
     // We need to figure the "real index" of the method in a
     // listing of all the methods of an object. We do this by
     // iterating down the supertraits of the object's trait until
@@ -355,10 +355,10 @@ struct LookupContext<'a, 'tcx: 'a> {
     self_expr: Option<&'a ast::Expr>,
 
     m_name: ast::Name,
-    supplied_tps: &'a [Ty],
+    supplied_tps: &'a [Ty<'tcx>],
     impl_dups: HashSet<DefId>,
-    inherent_candidates: Vec<Candidate>,
-    extension_candidates: Vec<ExtensionCandidate>,
+    inherent_candidates: Vec<Candidate<'tcx>>,
+    extension_candidates: Vec<ExtensionCandidate<'tcx>>,
     static_candidates: Vec<CandidateSource>,
     deref_args: check::DerefArgs,
     check_traits: CheckTraitsFlag,
@@ -369,21 +369,21 @@ struct LookupContext<'a, 'tcx: 'a> {
 // construct candidates only for inherent methods; for extension
 // traits, we use an ExtensionCandidate.
 #[deriving(Clone)]
-struct Candidate {
-    xform_self_ty: Ty,
-    rcvr_substs: subst::Substs,
-    method_ty: Rc<ty::Method>,
-    origin: MethodOrigin,
+struct Candidate<'tcx> {
+    xform_self_ty: Ty<'tcx>,
+    rcvr_substs: subst::Substs<'tcx>,
+    method_ty: Rc<ty::Method<'tcx>>,
+    origin: MethodOrigin<'tcx>,
 }
 
 // A variation on a candidate that just stores the data needed
 // extension trait matching.  Once we pick the trait that matches,
 // we'll construct a normal candidate from that. There is no deep
 // reason for this, the code just worked out a bit cleaner.
-struct ExtensionCandidate {
-    obligation: traits::Obligation,
-    xform_self_ty: Ty,
-    method_ty: Rc<ty::Method>,
+struct ExtensionCandidate<'tcx> {
+    obligation: traits::Obligation<'tcx>,
+    xform_self_ty: Ty<'tcx>,
+    method_ty: Rc<ty::Method<'tcx>>,
     method_num: uint,
 }
 
@@ -396,7 +396,7 @@ pub enum CandidateSource {
 }
 
 impl<'a, 'tcx> LookupContext<'a, 'tcx> {
-    fn search(self, self_ty: Ty) -> MethodResult {
+    fn search(self, self_ty: Ty<'tcx>) -> MethodResult<'tcx> {
         let span = self.self_expr.map_or(self.span, |e| e.span);
         let self_expr_id = self.self_expr.map(|e| e.id);
 
@@ -420,9 +420,9 @@ impl<'a, 'tcx> LookupContext<'a, 'tcx> {
     }
 
     fn search_step(&self,
-                   self_ty: Ty,
+                   self_ty: Ty<'tcx>,
                    autoderefs: uint)
-                   -> Option<Option<MethodResult>>
+                   -> Option<Option<MethodResult<'tcx>>>
     {
         // Oh my, what a return type!
         //
@@ -486,7 +486,7 @@ impl<'a, 'tcx> LookupContext<'a, 'tcx> {
     ///////////////////////////////////////////////////////////////////////////
     // Candidate collection (see comment at start of file)
 
-    fn push_inherent_candidates(&mut self, self_ty: Ty) {
+    fn push_inherent_candidates(&mut self, self_ty: Ty<'tcx>) {
         /*!
          * Collect all inherent candidates into
          * `self.inherent_candidates`.  See comment at the start of
@@ -522,7 +522,7 @@ impl<'a, 'tcx> LookupContext<'a, 'tcx> {
         });
     }
 
-    fn push_bound_candidates(&mut self, self_ty: Ty, restrict_to: Option<DefId>) {
+    fn push_bound_candidates(&mut self, self_ty: Ty<'tcx>, restrict_to: Option<DefId>) {
         let span = self.self_expr.map_or(self.span, |e| e.span);
         check::autoderef(self.fcx, span, self_ty, None, NoPreference, |self_ty, _| {
             match get(self_ty).sty {
@@ -610,9 +610,9 @@ impl<'a, 'tcx> LookupContext<'a, 'tcx> {
     }
 
     fn push_inherent_candidates_from_object(&mut self,
-                                            self_ty: Ty,
+                                            self_ty: Ty<'tcx>,
                                             did: DefId,
-                                            substs: &subst::Substs,
+                                            substs: &subst::Substs<'tcx>,
                                             _bounds: ty::ExistentialBounds) {
         debug!("push_inherent_candidates_from_object(self_ty={})",
                self_ty.repr(self.tcx()));
@@ -672,7 +672,7 @@ impl<'a, 'tcx> LookupContext<'a, 'tcx> {
     }
 
     fn push_inherent_candidates_from_param(&mut self,
-                                           rcvr_ty: Ty,
+                                           rcvr_ty: Ty<'tcx>,
                                            restrict_to: Option<DefId>,
                                            param_ty: ParamTy) {
         debug!("push_inherent_candidates_from_param(param_ty={})",
@@ -685,7 +685,7 @@ impl<'a, 'tcx> LookupContext<'a, 'tcx> {
     }
 
     fn push_inherent_candidates_from_bounds(&mut self,
-                                            _self_ty: Ty,
+                                            _self_ty: Ty<'tcx>,
                                             space: subst::ParamSpace,
                                             index: uint,
                                             restrict_to: Option<DefId>) {
@@ -735,12 +735,12 @@ impl<'a, 'tcx> LookupContext<'a, 'tcx> {
     // create the candidates.
     fn push_inherent_candidates_from_bounds_inner(
         &mut self,
-        bounds: &[Rc<TraitRef>],
-        mk_cand: |this: &mut LookupContext,
-                  tr: Rc<TraitRef>,
-                  m: Rc<ty::Method>,
+        bounds: &[Rc<TraitRef<'tcx>>],
+        mk_cand: |this: &mut LookupContext<'a, 'tcx>,
+                  tr: Rc<TraitRef<'tcx>>,
+                  m: Rc<ty::Method<'tcx>>,
                   method_num: uint|
-                  -> Option<Candidate>)
+                  -> Option<Candidate<'tcx>>)
     {
         let tcx = self.tcx();
         let mut cache = HashSet::new();
@@ -830,9 +830,9 @@ impl<'a, 'tcx> LookupContext<'a, 'tcx> {
     // Candidate selection (see comment at start of file)
 
     fn search_for_autoderefd_method(&self,
-                                    self_ty: Ty,
+                                    self_ty: Ty<'tcx>,
                                     autoderefs: uint)
-                                    -> Option<MethodResult> {
+                                    -> Option<MethodResult<'tcx>> {
         // Hacky. For overloaded derefs, there may be an adjustment
         // added to the expression from the outside context, so we do not store
         // an explicit adjustment, but rather we hardwire the single deref
@@ -866,9 +866,9 @@ impl<'a, 'tcx> LookupContext<'a, 'tcx> {
     }
 
     fn consider_reborrow(&self,
-                         self_ty: Ty,
+                         self_ty: Ty<'tcx>,
                          autoderefs: uint)
-                         -> (Ty, ty::AutoDerefRef) {
+                         -> (Ty<'tcx>, ty::AutoDerefRef<'tcx>) {
         /*!
          * In the event that we are invoking a method with a receiver
          * of a borrowed type like `&T`, `&mut T`, or `&mut [T]`,
@@ -924,8 +924,8 @@ impl<'a, 'tcx> LookupContext<'a, 'tcx> {
     // Takes an [T] - an unwrapped DST pointer (either ~ or &)
     // [T] to &[T] or &&[T] (note that we started with a &[T] or ~[T] which has
     // been implicitly derefed).
-    fn auto_slice_vec(&self, ty: Ty, autoderefs: uint)
-                      -> Option<MethodResult>
+    fn auto_slice_vec(&self, ty: Ty<'tcx>, autoderefs: uint)
+                      -> Option<MethodResult<'tcx>>
     {
         let tcx = self.tcx();
         debug!("auto_slice_vec {}", ppaux::ty_to_string(tcx, ty));
@@ -957,7 +957,8 @@ impl<'a, 'tcx> LookupContext<'a, 'tcx> {
     }
 
     // [T, ..len] -> [T] or &[T] or &&[T]
-    fn auto_unsize_vec(&self, ty: Ty, autoderefs: uint, len: uint) -> Option<MethodResult> {
+    fn auto_unsize_vec(&self, ty: Ty<'tcx>, autoderefs: uint, len: uint)
+                       -> Option<MethodResult<'tcx>> {
         let tcx = self.tcx();
         debug!("auto_unsize_vec {}", ppaux::ty_to_string(tcx, ty));
 
@@ -993,7 +994,7 @@ impl<'a, 'tcx> LookupContext<'a, 'tcx> {
             })
     }
 
-    fn auto_slice_str(&self, autoderefs: uint) -> Option<MethodResult> {
+    fn auto_slice_str(&self, autoderefs: uint) -> Option<MethodResult<'tcx>> {
         let tcx = self.tcx();
         debug!("auto_slice_str");
 
@@ -1015,7 +1016,8 @@ impl<'a, 'tcx> LookupContext<'a, 'tcx> {
     }
 
     // Coerce Box/&Trait instances to &Trait.
-    fn auto_slice_trait(&self, ty: Ty, autoderefs: uint) -> Option<MethodResult> {
+    fn auto_slice_trait(&self, ty: Ty<'tcx>, autoderefs: uint)
+                        -> Option<MethodResult<'tcx>> {
         debug!("auto_slice_trait");
         match ty::get(ty).sty {
             ty_trait(box ty::TyTrait {
@@ -1037,9 +1039,9 @@ impl<'a, 'tcx> LookupContext<'a, 'tcx> {
     }
 
     fn search_for_autofatptrd_method(&self,
-                                     self_ty: Ty,
+                                     self_ty: Ty<'tcx>,
                                      autoderefs: uint)
-                                     -> Option<MethodResult>
+                                     -> Option<MethodResult<'tcx>>
     {
         /*!
          * Searches for a candidate by converting things like
@@ -1066,8 +1068,8 @@ impl<'a, 'tcx> LookupContext<'a, 'tcx> {
         }
     }
 
-    fn search_for_autoptrd_method(&self, self_ty: Ty, autoderefs: uint)
-                                  -> Option<MethodResult>
+    fn search_for_autoptrd_method(&self, self_ty: Ty<'tcx>, autoderefs: uint)
+                                  -> Option<MethodResult<'tcx>>
     {
         /*!
          *
@@ -1106,8 +1108,8 @@ impl<'a, 'tcx> LookupContext<'a, 'tcx> {
         kind: |Region, ast::Mutability| -> ty::AutoRef,
         autoderefs: uint,
         mutbls: &[ast::Mutability],
-        mk_autoref_ty: |ast::Mutability, ty::Region| -> Ty)
-        -> Option<MethodResult>
+        mk_autoref_ty: |ast::Mutability, ty::Region| -> Ty<'tcx>)
+        -> Option<MethodResult<'tcx>>
     {
         // Hacky. For overloaded derefs, there may be an adjustment
         // added to the expression from the outside context, so we do not store
@@ -1151,7 +1153,7 @@ impl<'a, 'tcx> LookupContext<'a, 'tcx> {
         None
     }
 
-    fn search_for_method(&self, rcvr_ty: Ty) -> Option<MethodResult> {
+    fn search_for_method(&self, rcvr_ty: Ty<'tcx>) -> Option<MethodResult<'tcx>> {
         debug!("search_for_method(rcvr_ty={})", self.ty_to_string(rcvr_ty));
         let _indenter = indenter();
 
@@ -1171,9 +1173,9 @@ impl<'a, 'tcx> LookupContext<'a, 'tcx> {
         self.consider_extension_candidates(rcvr_ty)
     }
 
-    fn consider_candidates(&self, rcvr_ty: Ty,
-                           candidates: &[Candidate])
-                           -> Option<MethodResult> {
+    fn consider_candidates(&self, rcvr_ty: Ty<'tcx>,
+                           candidates: &[Candidate<'tcx>])
+                           -> Option<MethodResult<'tcx>> {
         let relevant_candidates = self.filter_candidates(rcvr_ty, candidates);
 
         if relevant_candidates.len() == 0 {
@@ -1190,7 +1192,8 @@ impl<'a, 'tcx> LookupContext<'a, 'tcx> {
         Some(Ok(self.confirm_candidate(rcvr_ty, &relevant_candidates[0])))
     }
 
-    fn filter_candidates(&self, rcvr_ty: Ty, candidates: &[Candidate]) -> Vec<Candidate> {
+    fn filter_candidates(&self, rcvr_ty: Ty<'tcx>, candidates: &[Candidate<'tcx>])
+                         -> Vec<Candidate<'tcx>> {
         let mut relevant_candidates: Vec<Candidate> = Vec::new();
 
         for candidate_a in candidates.iter().filter(|&c| self.is_relevant(rcvr_ty, c)) {
@@ -1221,8 +1224,8 @@ impl<'a, 'tcx> LookupContext<'a, 'tcx> {
         relevant_candidates
     }
 
-    fn consider_extension_candidates(&self, rcvr_ty: Ty)
-                                     -> Option<MethodResult>
+    fn consider_extension_candidates(&self, rcvr_ty: Ty<'tcx>)
+                                     -> Option<MethodResult<'tcx>>
     {
         let mut selcx = traits::SelectionContext::new(self.infcx(),
                                                       &self.fcx.inh.param_env,
@@ -1305,11 +1308,11 @@ impl<'a, 'tcx> LookupContext<'a, 'tcx> {
         Some(Ok(callee))
     }
 
-    fn probe_extension_candidate(&self,
-                                 selcx: &mut traits::SelectionContext,
-                                 rcvr_ty: Ty,
-                                 candidate: &ExtensionCandidate)
-                                 -> traits::MethodMatchResult
+    fn probe_extension_candidate<'cx>(&self,
+                                      selcx: &mut traits::SelectionContext<'cx, 'tcx>,
+                                      rcvr_ty: Ty<'tcx>,
+                                      candidate: &ExtensionCandidate<'tcx>)
+                                      -> traits::MethodMatchResult
     {
         debug!("probe_extension_candidate(rcvr_ty={}, candidate.obligation={})",
                rcvr_ty.repr(self.tcx()),
@@ -1318,8 +1321,8 @@ impl<'a, 'tcx> LookupContext<'a, 'tcx> {
         selcx.evaluate_method_obligation(rcvr_ty, candidate.xform_self_ty, &candidate.obligation)
     }
 
-    fn confirm_candidate(&self, rcvr_ty: Ty, candidate: &Candidate)
-                         -> MethodCallee
+    fn confirm_candidate(&self, rcvr_ty: Ty<'tcx>, candidate: &Candidate<'tcx>)
+                         -> MethodCallee<'tcx>
     {
         // This method performs two sets of substitutions, one after the other:
         // 1. Substitute values for any type/lifetime parameters from the impl and
@@ -1448,7 +1451,7 @@ impl<'a, 'tcx> LookupContext<'a, 'tcx> {
 
     fn fixup_derefs_on_method_receiver_if_necessary(
             &self,
-            method_callee: &MethodCallee) {
+            method_callee: &MethodCallee<'tcx>) {
         let sig = match ty::get(method_callee.ty).sty {
             ty::ty_bare_fn(ref f) => f.sig.clone(),
             ty::ty_closure(ref f) => f.sig.clone(),
@@ -1566,7 +1569,7 @@ impl<'a, 'tcx> LookupContext<'a, 'tcx> {
 
     // `rcvr_ty` is the type of the expression. It may be a subtype of a
     // candidate method's `self_ty`.
-    fn is_relevant(&self, rcvr_ty: Ty, candidate: &Candidate) -> bool {
+    fn is_relevant(&self, rcvr_ty: Ty<'tcx>, candidate: &Candidate<'tcx>) -> bool {
         debug!("is_relevant(rcvr_ty={}, candidate={})",
                self.ty_to_string(rcvr_ty), candidate.repr(self.tcx()));
 
@@ -1581,7 +1584,7 @@ impl<'a, 'tcx> LookupContext<'a, 'tcx> {
         self.fcx.tcx()
     }
 
-    fn ty_to_string(&self, ty: Ty) -> String {
+    fn ty_to_string(&self, ty: Ty<'tcx>) -> String {
         self.fcx.infcx().ty_to_string(ty)
     }
 
@@ -1615,13 +1618,14 @@ impl<'a, 'tcx> LookupContext<'a, 'tcx> {
         self.static_candidates.push(source);
     }
 
-    fn xform_self_ty(&self, method: &Rc<ty::Method>, substs: &subst::Substs) -> Ty {
+    fn xform_self_ty(&self, method: &Rc<ty::Method<'tcx>>,
+                     substs: &subst::Substs<'tcx>) -> Ty<'tcx> {
         let xform_self_ty = method.fty.sig.inputs[0].subst(self.tcx(), substs);
         self.replace_late_bound_regions_with_fresh_var(method.fty.sig.binder_id, &xform_self_ty)
     }
 
     fn replace_late_bound_regions_with_fresh_var<T>(&self, binder_id: ast::NodeId, value: &T) -> T
-        where T : TypeFoldable + Repr
+        where T : TypeFoldable<'tcx> + Repr<'tcx>
     {
         let (_, value) = replace_late_bound_regions(
             self.fcx.tcx(),
@@ -1632,10 +1636,10 @@ impl<'a, 'tcx> LookupContext<'a, 'tcx> {
     }
 }
 
-fn trait_method(tcx: &ty::ctxt,
-                trait_def_id: ast::DefId,
-                method_name: ast::Name)
-                -> Option<(uint, Rc<ty::Method>)>
+fn trait_method<'tcx>(tcx: &ty::ctxt<'tcx>,
+                      trait_def_id: ast::DefId,
+                      method_name: ast::Name)
+                      -> Option<(uint, Rc<ty::Method<'tcx>>)>
 {
     /*!
      * Find method with name `method_name` defined in `trait_def_id` and return it,
@@ -1650,10 +1654,10 @@ fn trait_method(tcx: &ty::ctxt,
         .and_then(|(idx, item)| item.as_opt_method().map(|m| (idx, m)))
 }
 
-fn impl_method(tcx: &ty::ctxt,
-               impl_def_id: ast::DefId,
-               method_name: ast::Name)
-               -> Option<Rc<ty::Method>>
+fn impl_method<'tcx>(tcx: &ty::ctxt<'tcx>,
+                     impl_def_id: ast::DefId,
+                     method_name: ast::Name)
+                     -> Option<Rc<ty::Method<'tcx>>>
 {
     let impl_items = tcx.impl_items.borrow();
     let impl_items = impl_items.find(&impl_def_id).unwrap();
@@ -1664,8 +1668,8 @@ fn impl_method(tcx: &ty::ctxt,
         .and_then(|item| item.as_opt_method())
 }
 
-impl Repr for Candidate {
-    fn repr(&self, tcx: &ty::ctxt) -> String {
+impl<'tcx> Repr<'tcx> for Candidate<'tcx> {
+    fn repr(&self, tcx: &ty::ctxt<'tcx>) -> String {
         format!("Candidate(rcvr_ty={}, rcvr_substs={}, method_ty={}, origin={})",
                 self.xform_self_ty.repr(tcx),
                 self.rcvr_substs.repr(tcx),
@@ -1674,8 +1678,8 @@ impl Repr for Candidate {
     }
 }
 
-impl Repr for ExtensionCandidate {
-    fn repr(&self, tcx: &ty::ctxt) -> String {
+impl<'tcx> Repr<'tcx> for ExtensionCandidate<'tcx> {
+    fn repr(&self, tcx: &ty::ctxt<'tcx>) -> String {
         format!("ExtensionCandidate(obligation={}, xform_self_ty={}, method_ty={}, method_num={})",
                 self.obligation.repr(tcx),
                 self.xform_self_ty.repr(tcx),
@@ -1684,7 +1688,7 @@ impl Repr for ExtensionCandidate {
     }
 }
 
-impl Candidate {
+impl<'tcx> Candidate<'tcx> {
     fn to_source(&self) -> CandidateSource {
         match self.origin {
             MethodStatic(def_id) => {
@@ -1703,7 +1707,7 @@ impl Candidate {
     }
 }
 
-impl ExtensionCandidate {
+impl<'tcx> ExtensionCandidate<'tcx> {
     fn to_source(&self) -> CandidateSource {
         TraitSource(self.obligation.trait_ref.def_id)
     }

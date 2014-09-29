@@ -723,7 +723,7 @@ impl<'a, 'tcx> ConstraintContext<'a, 'tcx> {
     /// Adds constraints appropriate for an instance of `ty` appearing
     /// in a context with ambient variance `variance`
     fn add_constraints_from_ty(&mut self,
-                               ty: Ty,
+                               ty: Ty<'tcx>,
                                variance: VarianceTermPtr<'a>) {
         debug!("add_constraints_from_ty(ty={})", ty.repr(self.tcx()));
 
@@ -848,9 +848,9 @@ impl<'a, 'tcx> ConstraintContext<'a, 'tcx> {
     /// object, etc) appearing in a context with ambient variance `variance`
     fn add_constraints_from_substs(&mut self,
                                    def_id: ast::DefId,
-                                   type_param_defs: &[ty::TypeParameterDef],
+                                   type_param_defs: &[ty::TypeParameterDef<'tcx>],
                                    region_param_defs: &[ty::RegionParameterDef],
-                                   substs: &subst::Substs,
+                                   substs: &subst::Substs<'tcx>,
                                    variance: VarianceTermPtr<'a>) {
         debug!("add_constraints_from_substs(def_id={})", def_id);
 
@@ -876,7 +876,7 @@ impl<'a, 'tcx> ConstraintContext<'a, 'tcx> {
     /// Adds constraints appropriate for a function with signature
     /// `sig` appearing in a context with ambient variance `variance`
     fn add_constraints_from_sig(&mut self,
-                                sig: &ty::FnSig,
+                                sig: &ty::FnSig<'tcx>,
                                 variance: VarianceTermPtr<'a>) {
         let contra = self.contravariant(variance);
         for &input in sig.inputs.iter() {
@@ -923,7 +923,7 @@ impl<'a, 'tcx> ConstraintContext<'a, 'tcx> {
     /// Adds constraints appropriate for a mutability-type pair
     /// appearing in a context with ambient variance `variance`
     fn add_constraints_from_mt(&mut self,
-                               mt: &ty::mt,
+                               mt: &ty::mt<'tcx>,
                                variance: VarianceTermPtr<'a>) {
         match mt.mutbl {
             ast::MutMutable => {

@@ -41,14 +41,14 @@ use util::ppaux::Repr;
 
 use std::collections::HashMap;
 
-pub trait LatticeDir {
+pub trait LatticeDir<'tcx> {
     // Relates the type `v` to `a` and `b` such that `v` represents
     // the LUB/GLB of `a` and `b` as appropriate.
-    fn relate_bound<'a>(&'a self, v: Ty, a: Ty, b: Ty) -> cres<()>;
+    fn relate_bound(&self, v: Ty<'tcx>, a: Ty<'tcx>, b: Ty<'tcx>) -> cres<'tcx, ()>;
 }
 
-impl<'a, 'tcx> LatticeDir for Lub<'a, 'tcx> {
-    fn relate_bound<'a>(&'a self, v: Ty, a: Ty, b: Ty) -> cres<()> {
+impl<'a, 'tcx> LatticeDir<'tcx> for Lub<'a, 'tcx> {
+    fn relate_bound(&self, v: Ty<'tcx>, a: Ty<'tcx>, b: Ty<'tcx>) -> cres<'tcx, ()> {
         let sub = self.sub();
         try!(sub.tys(a, v));
         try!(sub.tys(b, v));
@@ -56,8 +56,8 @@ impl<'a, 'tcx> LatticeDir for Lub<'a, 'tcx> {
     }
 }
 
-impl<'a, 'tcx> LatticeDir for Glb<'a, 'tcx> {
-    fn relate_bound<'a>(&'a self, v: Ty, a: Ty, b: Ty) -> cres<()> {
+impl<'a, 'tcx> LatticeDir<'tcx> for Glb<'a, 'tcx> {
+    fn relate_bound(&self, v: Ty<'tcx>, a: Ty<'tcx>, b: Ty<'tcx>) -> cres<'tcx, ()> {
         let sub = self.sub();
         try!(sub.tys(v, a));
         try!(sub.tys(v, b));
@@ -65,10 +65,10 @@ impl<'a, 'tcx> LatticeDir for Glb<'a, 'tcx> {
     }
 }
 
-pub fn super_lattice_tys<'tcx, L:LatticeDir+Combine<'tcx>>(this: &L,
-                                                           a: Ty,
-                                                           b: Ty)
-                                                           -> cres<Ty>
+pub fn super_lattice_tys<'tcx, L:LatticeDir<'tcx>+Combine<'tcx>>(this: &L,
+                                                                 a: Ty<'tcx>,
+                                                                 b: Ty<'tcx>)
+                                                                 -> cres<'tcx, Ty<'tcx>>
 {
     debug!("{}.lattice_tys({}, {})",
            this.tag(),
