@@ -15,6 +15,7 @@ use driver::config::FullDebugInfo;
 use llvm::ValueRef;
 use middle::def;
 use middle::mem_categorization::Typer;
+use middle::subst::Substs;
 use middle::trans::adt;
 use middle::trans::base::*;
 use middle::trans::build::*;
@@ -627,7 +628,7 @@ pub fn get_wrapper_for_bare_fn<'a, 'tcx>(ccx: &CrateContext<'a, 'tcx>,
     let _icx = push_ctxt("closure::get_wrapper_for_bare_fn");
 
     let arena = TypedArena::new();
-    let empty_param_substs = param_substs::empty();
+    let empty_param_substs = Substs::trans_empty();
     let fcx = new_fn_ctxt(ccx, llfn, ast::DUMMY_NODE_ID, true, f.sig.output,
                           &empty_param_substs, None, &arena);
     let bcx = init_function(&fcx, true, f.sig.output);

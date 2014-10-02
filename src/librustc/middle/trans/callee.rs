@@ -25,7 +25,7 @@ use llvm;
 use metadata::csearch;
 use middle::def;
 use middle::subst;
-use middle::subst::{Subst};
+use middle::subst::{Subst, Substs};
 use middle::trans::adt;
 use middle::trans::base;
 use middle::trans::base::*;
@@ -316,7 +316,7 @@ pub fn trans_unboxing_shim<'blk, 'tcx>(bcx: Block<'blk, 'tcx>,
                                      function_name.as_slice());
 
     let block_arena = TypedArena::new();
-    let empty_param_substs = param_substs::empty();
+    let empty_param_substs = Substs::trans_empty();
     let return_type = ty::ty_fn_ret(boxed_function_type);
     let fcx = new_fn_ctxt(ccx,
                           llfn,

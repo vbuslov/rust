@@ -11,8 +11,7 @@
 // Type substitutions.
 
 use middle::ty::{mod, Ty};
-use middle::ty_fold;
-use middle::ty_fold::{TypeFoldable, TypeFolder};
+use middle::ty_fold::{mod, TypeFolder};
 use util::ppaux::Repr;
 
 use std::fmt;
@@ -21,6 +20,15 @@ use std::raw;
 use std::slice::{Items, MutItems};
 use std::vec::Vec;
 use syntax::codemap::{Span, DUMMY_SP};
+
+///////////////////////////////////////////////////////////////////////////
+// Public trait `Subst`
+//
+// Just call `foo.subst(tcx, substs)` to perform a substitution across
+// `foo`. Or use `foo.subst_spanned(tcx, substs, Some(span))` when
+// there is more information available (for better errors).
+// See ty_fold for the actual implementation.
+pub use middle::ty_fold::TypeFoldable as Subst;
 
 ///////////////////////////////////////////////////////////////////////////
 // HomogeneousTuple3 trait
@@ -483,43 +491,9 @@ impl<T> VecPerParamSpace<T> {
 }
 
 ///////////////////////////////////////////////////////////////////////////
-// Public trait `Subst`
-//
-// Just call `foo.subst(tcx, substs)` to perform a substitution across
-// `foo`. Or use `foo.subst_spanned(tcx, substs, Some(span))` when
-// there is more information available (for better errors).
-
-pub trait Subst<'tcx> {
-    fn subst(&self, tcx: &ty::ctxt<'tcx>, substs: &Substs<'tcx>) -> Self {
-        self.subst_spanned(tcx, substs, None)
-    }
-
-    fn subst_spanned(&self, tcx: &ty::ctxt<'tcx>,
-                     substs: &Substs<'tcx>,
-                     span: Option<Span>)
-                     -> Self;
-}
-
-impl<'tcx, T:TypeFoldable<'tcx>> Subst<'tcx> for T {
-    fn subst_spanned(&self,
-                     tcx: &ty::ctxt<'tcx>,
-                     substs: &Substs<'tcx>,
-                     span: Option<Span>)
-                     -> T
-    {
-        let mut folder = SubstFolder { tcx: tcx,
-                                       substs: substs,
-                                       span: span,
-                                       root_ty: None,
-                                       ty_stack_depth: 0 };
-        (*self).fold_with(&mut folder)
-    }
-}
-
-///////////////////////////////////////////////////////////////////////////
 // The actual substitution engine itself is a type folder.
 
-struct SubstFolder<'a, 'tcx: 'a> {
+pub struct SubstFolder<'a, 'tcx: 'a> {
     tcx: &'a ty::ctxt<'tcx>,
     substs: &'a Substs<'tcx>,
 
@@ -531,6 +505,21 @@ struct SubstFolder<'a, 'tcx: 'a> {
 
     // Depth of type stack
     ty_stack_depth: uint,
+}
+
+impl<'a, 'tcx> SubstFolder<'a, 'tcx> {
+    pub fn new(tcx: &'a ty::ctxt<'tcx>,
+           substs: &'a Substs<'tcx>,
+           span: Option<Span>)
+           -> SubstFolder<'a, 'tcx> {
+        SubstFolder {
+            tcx: tcx,
+            substs: substs,
+            span: span,
+            root_ty: None,
+            ty_stack_depth: 0
+        }
+    }
 }
 
 impl<'a, 'tcx> TypeFolder<'tcx> for SubstFolder<'a, 'tcx> {

@@ -43,6 +43,7 @@ use middle::traits;
 use middle::typeck;
 use std::rc::Rc;
 use syntax::ast;
+use syntax::codemap::Span;
 use syntax::owned_slice::OwnedSlice;
 use util::ppaux::Repr;
 
@@ -53,6 +54,18 @@ use util::ppaux::Repr;
 /// Basically, every type that has a corresponding method in TypeFolder.
 pub trait TypeFoldable<'tcx> {
     fn fold_with<F: TypeFolder<'tcx>>(&self, folder: &mut F) -> Self;
+
+    fn subst(&self, tcx: &ty::ctxt<'tcx>, substs: &subst::Substs<'tcx>) -> Self {
+        self.subst_spanned(tcx, substs, None)
+    }
+
+    fn subst_spanned(&self, tcx: &ty::ctxt<'tcx>,
+                     substs: &subst::Substs<'tcx>,
+                     span: Option<Span>)
+                     -> Self {
+        let mut folder = subst::SubstFolder::new(tcx, substs, span);
+        self.fold_with(&mut folder)
+    }
 }
 
 /// The TypeFolder trait defines the actual *folding*. There is a
