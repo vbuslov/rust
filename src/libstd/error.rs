@@ -46,6 +46,32 @@
 //! The main use of this trait is in the `try!` macro, which uses it to
 //! automatically convert a given error to the error specified in a function's
 //! return type.
+//!
+//! For example,
+//!
+//! ```
+//! use std::io::IoError;
+//! use std::os::MapError;
+//!
+//! impl FromError<IoError> for Box<Error> {
+//!     fn from_error(err: IoError) -> Box<Error> {
+//!         box err
+//!     }
+//! }
+//!
+//! impl FromError<MapError> for Box<Error> {
+//!     fn from_error(err: MapError) -> Box<Error> {
+//!         box err
+//!     }
+//! }
+//!
+//! #[allow(unused_variables)]
+//! fn open_and_map() -> Box<Error> {
+//!     let f = try!(io::File::open("foo.txt"));
+//!     let m = try!(os::MemoryMap::new(0, &[]));
+//!     // do something interesting here...
+//! }
+//! ```
 
 use any::{Any, AnyRefExt, AnyMutRefExt};
 use mem::{transmute, transmute_copy};
@@ -79,13 +105,6 @@ impl<E> FromError<E> for E {
         err
     }
 }
-
-// FIXME (#https://github.com/rust-lang/rust/pull/17669/): Add this once multidispatch lands
-// impl<E: Error> FromError<E> for Box<Error> {
-//     fn from_err(err: E) -> Box<Error> {
-//         box err as Box<Error>
-//     }
-// }
 
 // Note: the definitions below are copied from core::any, and should be unified
 // as soon as possible.
