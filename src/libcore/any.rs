@@ -114,6 +114,9 @@ pub trait AnyRefExt<'a> {
     fn downcast_ref<T: 'static>(self) -> Option<&'a T>;
 }
 
+// Note: this code is copied to std::error, and should be unified as
+// soon as possible.
+
 #[stable]
 impl<'a> AnyRefExt<'a> for &'a Any {
     #[inline]

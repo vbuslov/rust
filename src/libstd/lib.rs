@@ -218,6 +218,7 @@ pub mod time;
 
 /* Common traits */
 
+pub mod error;
 pub mod from_str;
 pub mod num;
 pub mod to_string;
