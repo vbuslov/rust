@@ -223,7 +223,9 @@ responding to errors that may occur while attempting to read the numbers.
 
 use char::Char;
 use collections::Collection;
+use clone::Clone;
 use default::Default;
+use error::{FromError, Error};
 use fmt;
 use int;
 use iter::Iterator;
@@ -431,6 +433,22 @@ impl fmt::Show for IoError {
             IoError { detail: Some(ref detail), desc, .. } =>
                 write!(fmt, "{} ({})", desc, detail)
         }
+    }
+}
+
+impl Error for IoError {
+    fn description(&self) -> &str {
+        self.desc
+    }
+
+    fn detail(&self) -> Option<String> {
+        self.detail.clone()
+    }
+}
+
+impl FromError<IoError> for Box<Error> {
+    fn from_error(err: IoError) -> Box<Error> {
+        box err
     }
 }
 
