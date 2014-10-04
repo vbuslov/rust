@@ -73,7 +73,7 @@ type Hint = attr::ReprAttr;
 
 
 /// Representations.
-#[deriving(Eq, PartialEq, Show)]
+#[deriving(Eq, Show)]
 pub enum Repr<'tcx> {
     /// C-like enums; basically an int.
     CEnum(IntType, Disr, Disr), // discriminant range (signedness based on the IntType)
@@ -122,6 +122,34 @@ pub enum Repr<'tcx> {
         pub nndiscr: Disr,
         pub ptrfield: PointerField,
         pub nullfields: Vec<Ty<'tcx>>,
+    }
+}
+
+// FIXME(#15689) #[deriving(PartialEq)] fails with Ty (&TyS) because of method lookup.
+impl<'tcx> PartialEq for Repr<'tcx> {
+    fn eq(&self, other: &Repr<'tcx>) -> bool {
+        match (self, other) {
+            (&CEnum(a_ty, a_start, a_end), &CEnum(b_ty, b_start, b_end)) => {
+                a_ty == b_ty && a_start == b_start && a_end == b_end
+            }
+            (&Univariant(ref a_struct, a_dtor), &Univariant(ref b_struct, b_dtor)) => {
+                a_struct == b_struct && a_dtor == b_dtor
+            }
+            (&General(a_discr, ref a_tys, a_dtor), &General(b_discr, ref b_tys, b_dtor)) => {
+                a_discr == b_discr && a_tys == b_tys && a_dtor == b_dtor
+            }
+            (&RawNullablePointer { nndiscr: a_discr, nnty: a_ty, nullfields: ref a_fields},
+             &RawNullablePointer { nndiscr: b_discr, nnty: b_ty, nullfields: ref b_fields}) => {
+                a_discr == b_discr && a_ty == b_ty && a_fields == b_fields
+            }
+            (&StructWrappedNullablePointer { nonnull: ref a_struct, nndiscr: a_discr,
+                                             ptrfield: a_ptr, nullfields: ref a_fields},
+             &StructWrappedNullablePointer { nonnull: ref b_struct, nndiscr: b_discr,
+                                             ptrfield: b_ptr, nullfields: ref b_fields}) => {
+                a_struct == b_struct && a_discr == b_discr && a_ptr == b_ptr && a_fields == b_fields
+            }
+            _ => false
+        }
     }
 }
 

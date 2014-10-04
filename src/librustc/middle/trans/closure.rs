@@ -344,7 +344,6 @@ fn fill_fn_pair(bcx: Block, pair: ValueRef, llfn: ValueRef, llenvptr: ValueRef) 
     Store(bcx, llenvptr, GEPi(bcx, pair, [0u, abi::fn_field_box]));
 }
 
-#[deriving(PartialEq)]
 pub enum ClosureKind<'tcx> {
     NotClosure,
     // See load_environment.
@@ -382,6 +381,13 @@ impl<'a, 'tcx> ClosureEnv<'a, 'tcx> {
             UnboxedClosure(freevar_mode) => {
                 load_unboxed_closure_environment(bcx, arg_scope, freevar_mode, self.freevars)
             }
+        }
+    }
+
+    pub fn is_closure(&self) -> bool {
+        match self.kind {
+            NotClosure => false,
+            BoxedClosure(..) | UnboxedClosure(..) => true
         }
     }
 }

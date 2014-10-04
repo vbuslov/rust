@@ -163,7 +163,7 @@ pub enum Note {
 // dereference, but its type is the type *before* the dereference
 // (`@T`). So use `cmt.ty` to find the type of the value in a consistent
 // fashion. For more details, see the method `cat_pattern`
-#[deriving(Clone, PartialEq, Show)]
+#[deriving(Clone, Show)]
 pub struct cmt_<'tcx> {
     pub id: ast::NodeId,           // id of expr/pat producing this value
     pub span: Span,                // span of same expr/pat
@@ -171,6 +171,19 @@ pub struct cmt_<'tcx> {
     pub mutbl: MutabilityCategory, // mutability of expr as lvalue
     pub ty: Ty<'tcx>,              // type of the expr (*see WARNING above*)
     pub note: Note,                // Note about the provenance of this cmt
+}
+
+// FIXME(#15689) #[deriving(PartialEq)] fails with Ty (&TyS) because of method lookup.
+impl<'tcx> PartialEq for cmt_<'tcx> {
+    fn eq(&self, other: &cmt_<'tcx>) -> bool {
+        let (a, b) = (self, other);
+        a.id == b.id &&
+        a.span == b.span &&
+        a.cat == b.cat &&
+        a.mutbl == b.mutbl &&
+        a.ty == b.ty &&
+        a.note == b.note
+    }
 }
 
 pub type cmt<'tcx> = Rc<cmt_<'tcx>>;

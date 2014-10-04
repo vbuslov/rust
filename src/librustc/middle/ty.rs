@@ -196,10 +196,17 @@ pub struct AssociatedType {
     pub container: ImplOrTraitItemContainer,
 }
 
-#[deriving(Clone, PartialEq, Eq, Hash, Show)]
+#[deriving(Clone, Eq, Hash, Show)]
 pub struct mt<'tcx> {
     pub ty: Ty<'tcx>,
     pub mutbl: ast::Mutability,
+}
+
+// FIXME(#15689) #[deriving(PartialEq)] fails with Ty (&TyS) because of method lookup.
+impl<'tcx> PartialEq for mt<'tcx> {
+    fn eq(&self, other: &mt<'tcx>) -> bool {
+        self.ty == other.ty && self.mutbl == other.mutbl
+    }
 }
 
 #[deriving(Clone, PartialEq, Eq, Hash, Encodable, Decodable, Show)]
@@ -254,7 +261,7 @@ pub enum AutoAdjustment<'tcx> {
     AdjustDerefRef(AutoDerefRef<'tcx>)
 }
 
-#[deriving(Clone, PartialEq, Show)]
+#[deriving(Clone, Show)]
 pub enum UnsizeKind<'tcx> {
     // [T, ..n] -> [T], the uint field is n.
     UnsizeLength(uint),
@@ -262,6 +269,22 @@ pub enum UnsizeKind<'tcx> {
     // The uint is the index of the type parameter which is unsized.
     UnsizeStruct(Box<UnsizeKind<'tcx>>, uint),
     UnsizeVtable(TyTrait<'tcx>, /* the self type of the trait */ Ty<'tcx>)
+}
+
+// FIXME(#15689) #[deriving(PartialEq)] fails with Ty (&TyS) because of method lookup.
+impl<'tcx> PartialEq for UnsizeKind<'tcx> {
+    fn eq(&self, other: &UnsizeKind<'tcx>) -> bool {
+        match (self, other) {
+            (&UnsizeLength(a), &UnsizeLength(b)) => a == b,
+            (&UnsizeStruct(ref a_kind, a_idx), &UnsizeStruct(ref b_kind, b_idx)) => {
+                a_kind == b_kind && a_idx == b_idx
+            }
+            (&UnsizeVtable(ref a_trait, a_self), &UnsizeVtable(ref b_trait, b_self)) => {
+                a_trait == b_trait && a_self == b_self
+            }
+            _ => false
+        }
+    }
 }
 
 #[deriving(Clone, Show)]
@@ -607,7 +630,7 @@ impl<'tcx, S: Writer> Hash<S> for TyS<'tcx> {
 pub type Ty<'tcx> = &'tcx TyS<'tcx>;
 
 /// An entry in the type interner.
-struct InternedTy<'tcx> {
+pub struct InternedTy<'tcx> {
     ty: Ty<'tcx>
 }
 
@@ -670,10 +693,21 @@ pub struct ClosureTy<'tcx> {
     pub abi: abi::Abi,
 }
 
-#[deriving(Clone, PartialEq, Eq, Hash)]
+#[deriving(Clone, Eq, Hash)]
 pub enum FnOutput<'tcx> {
     FnConverging(Ty<'tcx>),
     FnDiverging
+}
+
+// FIXME(#15689) #[deriving(PartialEq)] fails with Ty (&TyS) because of method lookup.
+impl<'tcx> PartialEq for FnOutput<'tcx> {
+    fn eq(&self, other: &FnOutput<'tcx>) -> bool {
+        match (*self, *other) {
+            (FnConverging(a), FnConverging(b)) => a == b,
+            (FnDiverging, FnDiverging) => true,
+            _ => false
+        }
+    }
 }
 
 impl<'tcx> FnOutput<'tcx> {
@@ -697,12 +731,23 @@ impl<'tcx> FnOutput<'tcx> {
  * - `output` is the return type.
  * - `variadic` indicates whether this is a varidic function. (only true for foreign fns)
  */
-#[deriving(Clone, PartialEq, Eq, Hash)]
+#[deriving(Clone, Eq, Hash)]
 pub struct FnSig<'tcx> {
     pub binder_id: ast::NodeId,
     pub inputs: Vec<Ty<'tcx>>,
     pub output: FnOutput<'tcx>,
     pub variadic: bool
+}
+
+// FIXME(#15689) #[deriving(PartialEq)] fails with Ty (&TyS) because of method lookup.
+impl<'tcx> PartialEq for FnSig<'tcx> {
+    fn eq(&self, other: &FnSig<'tcx>) -> bool {
+        let (a, b) = (self, other);
+        a.binder_id == b.binder_id &&
+        a.inputs == b.inputs &&
+        a.output == b.output &&
+        a.variadic == b.variadic
+    }
 }
 
 #[deriving(Clone, PartialEq, Eq, Hash, Show)]
@@ -943,7 +988,7 @@ mod primitives {
 
 // NB: If you change this, you'll probably want to change the corresponding
 // AST structure in libsyntax/ast.rs as well.
-#[deriving(Clone, PartialEq, Eq, Hash, Show)]
+#[deriving(Clone, Eq, Hash, Show)]
 pub enum sty<'tcx> {
     ty_nil,
     ty_bool,
@@ -982,6 +1027,46 @@ pub enum sty<'tcx> {
     ty_err, // Also only used during inference/typeck, to represent
             // the type of an erroneous expression (helps cut down
             // on non-useful type error messages)
+}
+
+// FIXME(#15689) #[deriving(PartialEq)] fails with Ty (&TyS) because of method lookup.
+impl<'tcx> PartialEq for sty<'tcx> {
+    fn eq(&self, other: &sty<'tcx>) -> bool {
+        match (self, other) {
+            (&ty_nil, &ty_nil) |
+            (&ty_bool, &ty_bool) |
+            (&ty_char, &ty_char) |
+            (&ty_str, &ty_str) |
+            (&ty_err, &ty_err) => true,
+            (&ty_int(a), &ty_int(b)) => a == b,
+            (&ty_uint(a), &ty_uint(b)) => a == b,
+            (&ty_float(a), &ty_float(b)) => a == b,
+            (&ty_uniq(a), &ty_uniq(b)) |
+            (&ty_open(a), &ty_open(b)) => a == b,
+            (&ty_enum(a_def, ref a_substs), &ty_enum(b_def, ref b_substs)) |
+            (&ty_struct(a_def, ref a_substs), &ty_struct(b_def, ref b_substs)) => {
+                a_def == b_def && a_substs == b_substs
+            }
+            (&ty_vec(a_ty, a_len), &ty_vec(b_ty, b_len)) => {
+                a_ty == b_ty && a_len == b_len
+            }
+            (&ty_ptr(a), &ty_ptr(b)) => a == b,
+            (&ty_rptr(a_lt, a_ty), &ty_rptr(b_lt, b_ty)) => {
+                a_lt == b_lt && a_ty == b_ty
+            }
+            (&ty_bare_fn(ref a), &ty_bare_fn(ref b)) => a == b,
+            (&ty_closure(ref a), &ty_closure(ref b)) => a == b,
+            (&ty_trait(ref a), &ty_trait(ref b)) => a == b,
+            (&ty_unboxed_closure(a_def, a_lt, ref a_substs),
+             &ty_unboxed_closure(b_def, b_lt, ref b_substs)) => {
+                a_def == b_def && a_lt == b_lt && a_substs == b_substs
+            }
+            (&ty_tup(ref a), &ty_tup(ref b)) => a == b,
+            (&ty_param(a), &ty_param(b)) => a == b,
+            (&ty_infer(a), &ty_infer(b)) => a == b,
+            _ => false
+        }
+    }
 }
 
 #[deriving(Clone, PartialEq, Eq, Hash, Show)]
