@@ -228,7 +228,7 @@ pub fn report_error<'a, 'tcx>(fcx: &FnCtxt<'a, 'tcx>,
 
             // True if the type is a struct and contains a field with
             // the same name as the not-found method
-            let is_field = match ty::get(rcvr_ty).sty {
+            let is_field = match rcvr_ty.sty {
                 ty_struct(did, _) =>
                     ty::lookup_struct_fields(cx, did)
                         .iter()
@@ -498,7 +498,7 @@ impl<'a, 'tcx> LookupContext<'a, 'tcx> {
 
         let span = self.self_expr.map_or(self.span, |e| e.span);
         check::autoderef(self.fcx, span, self_ty, None, NoPreference, |self_ty, _| {
-            match get(self_ty).sty {
+            match self_ty.sty {
                 ty_trait(box TyTrait { def_id, ref substs, bounds, .. }) => {
                     self.push_inherent_candidates_from_object(self_ty, def_id, substs, bounds);
                     self.push_inherent_impl_candidates_for_type(def_id);
@@ -525,7 +525,7 @@ impl<'a, 'tcx> LookupContext<'a, 'tcx> {
     fn push_bound_candidates(&mut self, self_ty: Ty<'tcx>, restrict_to: Option<DefId>) {
         let span = self.self_expr.map_or(self.span, |e| e.span);
         check::autoderef(self.fcx, span, self_ty, None, NoPreference, |self_ty, _| {
-            match get(self_ty).sty {
+            match self_ty.sty {
                 ty_param(p) => {
                     self.push_inherent_candidates_from_param(self_ty, restrict_to, p);
                 }
@@ -887,7 +887,7 @@ impl<'a, 'tcx> LookupContext<'a, 'tcx> {
          */
 
         let tcx = self.tcx();
-        return match ty::get(self_ty).sty {
+        return match self_ty.sty {
             ty::ty_rptr(_, self_mt) if default_method_hack(self_mt) => {
                 (self_ty,
                  ty::AutoDerefRef {
@@ -1019,7 +1019,7 @@ impl<'a, 'tcx> LookupContext<'a, 'tcx> {
     fn auto_slice_trait(&self, ty: Ty<'tcx>, autoderefs: uint)
                         -> Option<MethodResult<'tcx>> {
         debug!("auto_slice_trait");
-        match ty::get(ty).sty {
+        match ty.sty {
             ty_trait(box ty::TyTrait {
                     def_id: trt_did,
                     substs: ref trt_substs,
@@ -1051,7 +1051,7 @@ impl<'a, 'tcx> LookupContext<'a, 'tcx> {
         let tcx = self.tcx();
         debug!("search_for_autofatptrd_method {}", ppaux::ty_to_string(tcx, self_ty));
 
-        let sty = ty::get(self_ty).sty.clone();
+        let sty = self_ty.sty.clone();
         match sty {
             ty_vec(ty, Some(len)) => self.auto_unsize_vec(ty, autoderefs, len),
             ty_vec(ty, None) => self.auto_slice_vec(ty, autoderefs),
@@ -1078,7 +1078,7 @@ impl<'a, 'tcx> LookupContext<'a, 'tcx> {
          */
 
         let tcx = self.tcx();
-        match ty::get(self_ty).sty {
+        match self_ty.sty {
             ty_bare_fn(..) | ty_uniq(..) | ty_rptr(..) |
             ty_infer(IntVar(_)) |
             ty_infer(FloatVar(_)) |
@@ -1452,13 +1452,13 @@ impl<'a, 'tcx> LookupContext<'a, 'tcx> {
     fn fixup_derefs_on_method_receiver_if_necessary(
             &self,
             method_callee: &MethodCallee<'tcx>) {
-        let sig = match ty::get(method_callee.ty).sty {
+        let sig = match method_callee.ty.sty {
             ty::ty_bare_fn(ref f) => f.sig.clone(),
             ty::ty_closure(ref f) => f.sig.clone(),
             _ => return,
         };
 
-        match ty::get(sig.inputs[0]).sty {
+        match sig.inputs[0].sty {
             ty::ty_rptr(_, ty::mt {
                 ty: _,
                 mutbl: ast::MutMutable,

@@ -450,7 +450,7 @@ impl<'tcx> TypeFoldable<'tcx> for traits::VtableParamData<'tcx> {
 pub fn super_fold_ty<'tcx, T: TypeFolder<'tcx>>(this: &mut T,
                                                 t: Ty<'tcx>)
                                                 -> Ty<'tcx> {
-    let sty = ty::get(t).sty.fold_with(this);
+    let sty = t.sty.fold_with(this);
     ty::mk_t(this.tcx(), sty)
 }
 
@@ -709,7 +709,7 @@ impl<'a, 'tcx> RegionFolder<'a, 'tcx> {
 /// If `ty` has `FnSig` (i.e. closure or fn), return its binder_id;
 /// else None.
 fn opt_binder_id_of_function(t: Ty) -> Option<ast::NodeId> {
-    match ty::get(t).sty {
+    match t.sty {
         ty::ty_closure(ref f) => Some(f.sig.binder_id),
         ty::ty_bare_fn(ref f) => Some(f.sig.binder_id),
         _                     => None,

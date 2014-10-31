@@ -56,7 +56,7 @@ pub use middle::trans::context::CrateContext;
 
 fn type_is_newtype_immediate<'a, 'tcx>(ccx: &CrateContext<'a, 'tcx>,
                                        ty: Ty<'tcx>) -> bool {
-    match ty::get(ty).sty {
+    match ty.sty {
         ty::ty_struct(def_id, ref substs) => {
             let fields = ty::struct_fields(ccx.tcx(), def_id, substs);
             fields.len() == 1 &&
@@ -83,7 +83,7 @@ pub fn type_is_immediate<'a, 'tcx>(ccx: &CrateContext<'a, 'tcx>, ty: Ty<'tcx>) -
     if !ty::type_is_sized(tcx, ty) {
         return false;
     }
-    match ty::get(ty).sty {
+    match ty.sty {
         ty::ty_struct(..) | ty::ty_enum(..) | ty::ty_tup(..) |
         ty::ty_unboxed_closure(..) => {
             let llty = sizing_type_of(ccx, ty);

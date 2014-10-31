@@ -666,7 +666,7 @@ impl<'a, 'tcx> PrivacyVisitor<'a, 'tcx> {
         }
 
         let struct_type = ty::lookup_item_type(self.tcx, id).ty;
-        let struct_desc = match ty::get(struct_type).sty {
+        let struct_desc = match struct_type.sty {
             ty::ty_struct(_, _) =>
                 format!("struct `{}`", ty::item_path_str(self.tcx, id)),
             ty::ty_enum(enum_id, _) =>
@@ -838,7 +838,7 @@ impl<'a, 'tcx, 'v> Visitor<'v> for PrivacyVisitor<'a, 'tcx> {
     fn visit_expr(&mut self, expr: &ast::Expr) {
         match expr.node {
             ast::ExprField(ref base, ident, _) => {
-                match ty::get(ty::expr_ty_adjusted(self.tcx, &**base)).sty {
+                match ty::expr_ty_adjusted(self.tcx, &**base).sty {
                     ty::ty_struct(id, _) => {
                         self.check_field(expr.span, id, NamedField(ident.node));
                     }
@@ -846,7 +846,7 @@ impl<'a, 'tcx, 'v> Visitor<'v> for PrivacyVisitor<'a, 'tcx> {
                 }
             }
             ast::ExprTupField(ref base, idx, _) => {
-                match ty::get(ty::expr_ty_adjusted(self.tcx, &**base)).sty {
+                match ty::expr_ty_adjusted(self.tcx, &**base).sty {
                     ty::ty_struct(id, _) => {
                         self.check_field(expr.span, id, UnnamedField(idx.node));
                     }
@@ -868,7 +868,7 @@ impl<'a, 'tcx, 'v> Visitor<'v> for PrivacyVisitor<'a, 'tcx> {
                 }
             }
             ast::ExprStruct(_, ref fields, _) => {
-                match ty::get(ty::expr_ty(self.tcx, expr)).sty {
+                match ty::expr_ty(self.tcx, expr).sty {
                     ty::ty_struct(id, _) => {
                         for field in (*fields).iter() {
                             self.check_field(expr.span, id,
@@ -978,7 +978,7 @@ impl<'a, 'tcx, 'v> Visitor<'v> for PrivacyVisitor<'a, 'tcx> {
 
         match pattern.node {
             ast::PatStruct(_, ref fields, _) => {
-                match ty::get(ty::pat_ty(self.tcx, pattern)).sty {
+                match ty::pat_ty(self.tcx, pattern).sty {
                     ty::ty_struct(id, _) => {
                         for field in fields.iter() {
                             self.check_field(pattern.span, id,
@@ -1009,7 +1009,7 @@ impl<'a, 'tcx, 'v> Visitor<'v> for PrivacyVisitor<'a, 'tcx> {
             // Patterns which bind no fields are allowable (the path is check
             // elsewhere).
             ast::PatEnum(_, Some(ref fields)) => {
-                match ty::get(ty::pat_ty(self.tcx, pattern)).sty {
+                match ty::pat_ty(self.tcx, pattern).sty {
                     ty::ty_struct(id, _) => {
                         for (i, field) in fields.iter().enumerate() {
                             match field.node {

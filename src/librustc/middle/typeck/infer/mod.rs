@@ -517,7 +517,7 @@ impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
     }
 
     pub fn type_var_diverges(&'a self, ty: Ty) -> bool {
-        match ty::get(ty).sty {
+        match ty.sty {
             ty::ty_infer(ty::TyVar(vid)) => self.type_variables.borrow().var_diverges(vid),
             _ => false
         }
@@ -822,7 +822,7 @@ impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
     }
 
     pub fn shallow_resolve(&self, typ: Ty<'tcx>) -> Ty<'tcx> {
-        match ty::get(typ).sty {
+        match typ.sty {
             ty::ty_infer(ty::TyVar(v)) => {
                 self.type_variables.borrow()
                     .probe(v)
@@ -863,7 +863,7 @@ impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
                                   trait_ref.substs.clone(),
                                   ty::region_existential_bound(ty::ReStatic));
         let dummy1 = self.resolve_type_vars_if_possible(dummy0);
-        match ty::get(dummy1).sty {
+        match dummy1.sty {
             ty::ty_trait(box ty::TyTrait { ref def_id, ref substs, .. }) => {
                 ty::TraitRef {
                     def_id: *def_id,

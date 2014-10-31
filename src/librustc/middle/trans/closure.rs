@@ -469,7 +469,7 @@ pub fn get_or_create_declaration_if_unboxed_closure(bcx: Block,
     }
 
     let function_type = node_id_type(bcx, closure_id.node);
-    let params = match ty::get(function_type).sty {
+    let params = match function_type.sty {
         ty::ty_unboxed_closure(_, _, ref substs) => substs.types.clone(),
         _ => unreachable!()
     };
@@ -605,7 +605,7 @@ pub fn get_wrapper_for_bare_fn<'a, 'tcx>(ccx: &CrateContext<'a, 'tcx>,
 
     debug!("get_wrapper_for_bare_fn(closure_ty={})", closure_ty.repr(tcx));
 
-    let f = match ty::get(closure_ty).sty {
+    let f = match closure_ty.sty {
         ty::ty_closure(ref f) => f,
         _ => {
             ccx.sess().bug(format!("get_wrapper_for_bare_fn: \

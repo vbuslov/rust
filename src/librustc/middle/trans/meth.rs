@@ -471,7 +471,7 @@ pub fn trans_trait_callee_from_llval<'blk, 'tcx>(bcx: Block<'blk, 'tcx>,
     // Load the function from the vtable and cast it to the expected type.
     debug!("(translating trait callee) loading method");
     // Replace the self type (&Self or Box<Self>) with an opaque pointer.
-    let llcallee_ty = match ty::get(callee_ty).sty {
+    let llcallee_ty = match callee_ty.sty {
         ty::ty_bare_fn(ref f) if f.abi == Rust || f.abi == RustCall => {
             type_of_rust_fn(ccx,
                             Some(Type::i8p(ccx)),
@@ -505,7 +505,7 @@ pub fn trans_trait_callee_from_llval<'blk, 'tcx>(bcx: Block<'blk, 'tcx>,
 fn get_callee_substitutions_for_unboxed_closure<'blk, 'tcx>(bcx: Block<'blk, 'tcx>,
                                                             self_ty: Ty<'tcx>)
                                                             -> subst::Substs<'tcx> {
-    match ty::get(self_ty).sty {
+    match self_ty.sty {
         ty::ty_unboxed_closure(_, _, ref substs) => {
             substs.with_self_ty(ty::mk_rptr(bcx.tcx(),
                                             ty::ReStatic,
@@ -586,12 +586,10 @@ pub fn get_vtable<'blk, 'tcx>(bcx: Block<'blk, 'tcx>,
                                                  unboxed closure");
                     if closure_info.kind == ty::FnOnceUnboxedClosureKind {
                         // Untuple the arguments and create an unboxing shim.
-                        let (new_inputs, new_output) = match ty::get(self_ty).sty {
+                        let (new_inputs, new_output) = match self_ty.sty {
                             ty::ty_unboxed_closure(_, _, ref substs) => {
                                 let mut new_inputs = vec![self_ty.clone()];
-                                match ty::get(closure_info.closure_type
-                                              .sig
-                                              .inputs[0]).sty {
+                                match closure_info.closure_type.sig.inputs[0].sty {
                                     ty::ty_tup(ref elements) => {
                                         for element in elements.iter() {
                                             new_inputs.push(element.subst(bcx.tcx(), substs));

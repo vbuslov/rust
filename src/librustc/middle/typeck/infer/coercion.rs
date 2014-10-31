@@ -97,9 +97,9 @@ impl<'f, 'tcx> Coerce<'f, 'tcx> {
         // then it would get auto-borrowed to `&[T, ..n]` and then DST-ified
         // to `&[T]`. Doing it all at once makes the target code a bit more
         // efficient and spares us from having to handle multiple coercions.
-        match ty::get(b).sty {
+        match b.sty {
             ty::ty_ptr(mt_b) | ty::ty_rptr(_, mt_b) => {
-                match ty::get(mt_b.ty).sty {
+                match mt_b.ty.sty {
                     ty::ty_vec(_, None) => {
                         let unsize_and_ref = self.unpack_actual_value(a, |sty_a| {
                             self.coerce_unsized_with_borrow(a, sty_a, b, mt_b.mutbl)
@@ -126,9 +126,9 @@ impl<'f, 'tcx> Coerce<'f, 'tcx> {
         //
         // Note: does not attempt to resolve type variables we encounter.
         // See above for details.
-        match ty::get(b).sty {
+        match b.sty {
             ty::ty_ptr(mt_b) => {
-                match ty::get(mt_b.ty).sty {
+                match mt_b.ty.sty {
                     ty::ty_str => {
                         return self.unpack_actual_value(a, |sty_a| {
                             self.coerce_unsafe_ptr(a, sty_a, b, ast::MutImmutable)
@@ -155,7 +155,7 @@ impl<'f, 'tcx> Coerce<'f, 'tcx> {
             }
 
             ty::ty_rptr(_, mt_b) => {
-                match ty::get(mt_b.ty).sty {
+                match mt_b.ty.sty {
                     ty::ty_str => {
                         return self.unpack_actual_value(a, |sty_a| {
                             self.coerce_borrowed_pointer(a, sty_a, b, ast::MutImmutable)
@@ -223,7 +223,7 @@ impl<'f, 'tcx> Coerce<'f, 'tcx> {
         match resolve_type(self.get_ref().infcx, None,
                            a, try_resolve_tvar_shallow) {
             Ok(t) => {
-                f(&ty::get(t).sty)
+                f(&t.sty)
             }
             Err(e) => {
                 self.get_ref().infcx.tcx.sess.span_bug(
@@ -323,7 +323,7 @@ impl<'f, 'tcx> Coerce<'f, 'tcx> {
 
         let sub = Sub(self.get_ref().clone());
 
-        let sty_b = &ty::get(b).sty;
+        let sty_b = &b.sty;
         match (sty_a, sty_b) {
             (&ty::ty_rptr(_, ty::mt{ty: t_a, mutbl: mutbl_a}), &ty::ty_rptr(_, mt_b)) => {
                 self.unpack_actual_value(t_a, |sty_a| {
@@ -523,7 +523,7 @@ impl<'f, 'tcx> Coerce<'f, 'tcx> {
         let tcx = self.get_ref().infcx.tcx;
 
         match *sty_a {
-            ty::ty_rptr(_, ty::mt{ty, mutbl}) => match ty::get(ty).sty {
+            ty::ty_rptr(_, ty::mt{ty, mutbl}) => match ty.sty {
                 ty::ty_trait(box ty::TyTrait {
                         def_id,
                         ref substs,
