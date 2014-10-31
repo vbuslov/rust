@@ -32,7 +32,7 @@ use middle;
 use util::ppaux::{note_and_explain_region, bound_region_ptr_to_string};
 use util::ppaux::{trait_store_to_string, ty_to_string};
 use util::ppaux::{Repr, UserString};
-use util::common::{indenter, memoized, memoized_with_key};
+use util::common::{indenter, memoized};
 use util::nodemap::{NodeMap, NodeSet, DefIdMap, DefIdSet, FnvHashMap};
 
 use std::cell::{Cell, RefCell};
@@ -437,7 +437,6 @@ pub struct ctxt<'tcx> {
     // FIXME(eddyb) use a FnvHashSet<InternedTy<'tcx>> when equivalent keys can
     // queried from a HashSet.
     interner: RefCell<FnvHashMap<InternedTy<'tcx>, Ty<'tcx>>>,
-    pub next_id: Cell<uint>,
     pub sess: Session,
     pub def_map: resolve::DefMap,
 
@@ -481,7 +480,7 @@ pub struct ctxt<'tcx> {
     pub rcache: creader_cache<'tcx>,
     pub short_names_cache: RefCell<HashMap<Ty<'tcx>, String>>,
     pub needs_unwind_cleanup_cache: RefCell<HashMap<Ty<'tcx>, bool>>,
-    pub tc_cache: RefCell<HashMap<uint, TypeContents>>,
+    pub tc_cache: RefCell<HashMap<Ty<'tcx>, TypeContents>>,
     pub ast_ty_to_ty_cache: RefCell<NodeMap<ast_ty_to_ty_cache_entry<'tcx>>>,
     pub enum_var_cache: RefCell<DefIdMap<Rc<Vec<Rc<VariantInfo<'tcx>>>>>>,
     pub ty_param_defs: RefCell<NodeMap<TypeParameterDef<'tcx>>>,
@@ -604,7 +603,6 @@ bitflags! {
 #[deriving(Show)]
 pub struct TyS<'tcx> {
     pub sty: sty<'tcx>,
-    pub id: uint,
     pub flags: TypeFlags,
 }
 
@@ -669,7 +667,6 @@ pub fn type_has_ty_infer(ty: Ty) -> bool {
 pub fn type_needs_infer(ty: Ty) -> bool {
     tbox_has_flag(ty, HAS_TY_INFER | HAS_RE_INFER)
 }
-pub fn type_id(ty: Ty) -> uint { ty.id }
 
 
 #[deriving(Clone, PartialEq, Eq, Hash, Show)]
@@ -948,38 +945,34 @@ mod primitives {
     use syntax::ast;
 
     macro_rules! def_prim_ty(
-        ($name:ident, $sty:expr, $id:expr) => (
+        ($name:ident, $sty:expr) => (
             pub static $name: TyS<'static> = TyS {
                 sty: $sty,
-                id: $id,
                 flags: super::NO_TYPE_FLAGS,
             };
         )
     )
 
-    def_prim_ty!(TY_NIL,    super::ty_nil,                  0)
-    def_prim_ty!(TY_BOOL,   super::ty_bool,                 1)
-    def_prim_ty!(TY_CHAR,   super::ty_char,                 2)
-    def_prim_ty!(TY_INT,    super::ty_int(ast::TyI),        3)
-    def_prim_ty!(TY_I8,     super::ty_int(ast::TyI8),       4)
-    def_prim_ty!(TY_I16,    super::ty_int(ast::TyI16),      5)
-    def_prim_ty!(TY_I32,    super::ty_int(ast::TyI32),      6)
-    def_prim_ty!(TY_I64,    super::ty_int(ast::TyI64),      7)
-    def_prim_ty!(TY_UINT,   super::ty_uint(ast::TyU),       8)
-    def_prim_ty!(TY_U8,     super::ty_uint(ast::TyU8),      9)
-    def_prim_ty!(TY_U16,    super::ty_uint(ast::TyU16),     10)
-    def_prim_ty!(TY_U32,    super::ty_uint(ast::TyU32),     11)
-    def_prim_ty!(TY_U64,    super::ty_uint(ast::TyU64),     12)
-    def_prim_ty!(TY_F32,    super::ty_float(ast::TyF32),    14)
-    def_prim_ty!(TY_F64,    super::ty_float(ast::TyF64),    15)
+    def_prim_ty!(TY_NIL,    super::ty_nil)
+    def_prim_ty!(TY_BOOL,   super::ty_bool)
+    def_prim_ty!(TY_CHAR,   super::ty_char)
+    def_prim_ty!(TY_INT,    super::ty_int(ast::TyI))
+    def_prim_ty!(TY_I8,     super::ty_int(ast::TyI8))
+    def_prim_ty!(TY_I16,    super::ty_int(ast::TyI16))
+    def_prim_ty!(TY_I32,    super::ty_int(ast::TyI32))
+    def_prim_ty!(TY_I64,    super::ty_int(ast::TyI64))
+    def_prim_ty!(TY_UINT,   super::ty_uint(ast::TyU))
+    def_prim_ty!(TY_U8,     super::ty_uint(ast::TyU8))
+    def_prim_ty!(TY_U16,    super::ty_uint(ast::TyU16))
+    def_prim_ty!(TY_U32,    super::ty_uint(ast::TyU32))
+    def_prim_ty!(TY_U64,    super::ty_uint(ast::TyU64))
+    def_prim_ty!(TY_F32,    super::ty_float(ast::TyF32))
+    def_prim_ty!(TY_F64,    super::ty_float(ast::TyF64))
 
     pub static TY_ERR: TyS<'static> = TyS {
         sty: super::ty_err,
-        id: 17,
         flags: super::HAS_TY_ERR,
     };
-
-    pub const LAST_PRIMITIVE_ID: uint = 18;
 }
 
 // NB: If you change this, you'll probably want to change the corresponding
@@ -1595,7 +1588,6 @@ pub fn mk_ctxt<'tcx>(s: Session,
         named_region_map: named_region_map,
         item_variance_map: RefCell::new(DefIdMap::new()),
         variance_computed: Cell::new(false),
-        next_id: Cell::new(primitives::LAST_PRIMITIVE_ID),
         sess: s,
         def_map: dm,
         region_maps: region_maps,
@@ -1760,13 +1752,10 @@ pub fn mk_t<'tcx>(cx: &ctxt<'tcx>, st: sty<'tcx>) -> Ty<'tcx> {
 
     let ty = cx.type_arena.alloc(TyS {
         sty: st,
-        id: cx.next_id.get(),
         flags: flags,
     });
 
     cx.interner.borrow_mut().insert(InternedTy { ty: ty }, ty);
-
-    cx.next_id.set(cx.next_id.get() + 1);
 
     ty
 }
@@ -2464,13 +2453,13 @@ pub fn type_interior_is_unsafe<'tcx>(cx: &ctxt<'tcx>, ty: Ty<'tcx>) -> bool {
 }
 
 pub fn type_contents<'tcx>(cx: &ctxt<'tcx>, ty: Ty<'tcx>) -> TypeContents {
-    return memoized_with_key(&cx.tc_cache, ty, |ty| {
+    return memoized(&cx.tc_cache, ty, |ty| {
         tc_ty(cx, ty, &mut HashMap::new())
-    }, |&ty| type_id(ty));
+    });
 
     fn tc_ty<'tcx>(cx: &ctxt<'tcx>,
                    ty: Ty<'tcx>,
-                   cache: &mut HashMap<uint, TypeContents>) -> TypeContents
+                   cache: &mut HashMap<Ty<'tcx>, TypeContents>) -> TypeContents
     {
         // Subtle: Note that we are *not* using cx.tc_cache here but rather a
         // private cache for this walk.  This is needed in the case of cyclic
@@ -2493,16 +2482,15 @@ pub fn type_contents<'tcx>(cx: &ctxt<'tcx>, ty: Ty<'tcx>) -> TypeContents {
         // which is incorrect.  This value was computed based on the crutch
         // value for the type contents of list.  The correct value is
         // TC::OwnsOwned.  This manifested as issue #4821.
-        let ty_id = type_id(ty);
-        match cache.find(&ty_id) {
+        match cache.find(&ty) {
             Some(tc) => { return *tc; }
             None => {}
         }
-        match cx.tc_cache.borrow().find(&ty_id) {    // Must check both caches!
+        match cx.tc_cache.borrow().find(&ty) {    // Must check both caches!
             Some(tc) => { return *tc; }
             None => {}
         }
-        cache.insert(ty_id, TC::None);
+        cache.insert(ty, TC::None);
 
         let result = match ty.sty {
             // uint and int are ffi-unsafe
@@ -2672,13 +2660,13 @@ pub fn type_contents<'tcx>(cx: &ctxt<'tcx>, ty: Ty<'tcx>) -> TypeContents {
             }
         };
 
-        cache.insert(ty_id, result);
-        return result;
+        cache.insert(ty, result);
+        result
     }
 
     fn tc_mt<'tcx>(cx: &ctxt<'tcx>,
                    mt: mt<'tcx>,
-                   cache: &mut HashMap<uint, TypeContents>) -> TypeContents
+                   cache: &mut HashMap<Ty<'tcx>, TypeContents>) -> TypeContents
     {
         let mc = TC::ReachesMutable.when(mt.mutbl == MutMutable);
         mc | tc_ty(cx, mt.ty, cache)
@@ -2987,7 +2975,7 @@ pub fn is_type_representable<'tcx>(cx: &ctxt<'tcx>, sp: Span, ty: Ty<'tcx>)
                 pairs.all(|(&a, &b)| same_type(a, b))
             }
             _ => {
-                type_id(a) == type_id(b)
+                a == b
             }
         }
     }

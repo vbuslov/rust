@@ -176,11 +176,11 @@ debuginfo, more than one `Ty` instance may map to the same debuginfo type
 metadata, that is, some struct `Struct<'a>` may have N instantiations with
 different concrete substitutions for `'a`, and thus there will be N `Ty`
 instances for the type `Struct<'a>` even though it is not generic otherwise.
-Unfortunately this means that we cannot use `ty::type_id()` as cheap identifier
+Unfortunately this means that we cannot use `&TyS` as cheap identifier
 for type metadata---we have done this in the past, but it led to unnecessary
 metadata duplication in the best case and LLVM assertions in the worst. However,
 the unique type ID as described above *can* be used as identifier. Since it is
-comparatively expensive to construct, though, `ty::type_id()` is still used
+comparatively expensive to construct, though, `&TyS` is still used
 additionally as an optimization for cases where the exact same type has been
 seen before (which is most of the time). */
 
@@ -254,20 +254,20 @@ struct UniqueTypeId(ast::Name);
 // created so far. The metadata nodes are indexed by UniqueTypeId, and, for
 // faster lookup, also by Ty. The TypeMap is responsible for creating
 // UniqueTypeIds.
-struct TypeMap {
+struct TypeMap<'tcx> {
     // The UniqueTypeIds created so far
     unique_id_interner: Interner<Rc<String>>,
     // A map from UniqueTypeId to debuginfo metadata for that type. This is a 1:1 mapping.
     unique_id_to_metadata: HashMap<UniqueTypeId, DIType>,
-    // A map from ty::type_id() to debuginfo metadata. This is a N:1 mapping.
-    type_to_metadata: HashMap<uint, DIType>,
-    // A map from ty::type_id() to UniqueTypeId. This is a N:1 mapping.
-    type_to_unique_id: HashMap<uint, UniqueTypeId>
+    // A map from types to debuginfo metadata. This is a N:1 mapping.
+    type_to_metadata: HashMap<Ty<'tcx>, DIType>,
+    // A map from types to UniqueTypeId. This is a N:1 mapping.
+    type_to_unique_id: HashMap<Ty<'tcx>, UniqueTypeId>
 }
 
-impl TypeMap {
+impl<'tcx> TypeMap<'tcx> {
 
-    fn new() -> TypeMap {
+    fn new() -> TypeMap<'tcx> {
         TypeMap {
             unique_id_interner: Interner::new(),
             type_to_metadata: HashMap::new(),
@@ -278,11 +278,11 @@ impl TypeMap {
 
     // Adds a Ty to metadata mapping to the TypeMap. The method will fail if
     // the mapping already exists.
-    fn register_type_with_metadata<'a, 'tcx>(&mut self,
-                                             cx: &CrateContext<'a, 'tcx>,
-                                             type_: Ty<'tcx>,
-                                             metadata: DIType) {
-        if !self.type_to_metadata.insert(ty::type_id(type_), metadata) {
+    fn register_type_with_metadata<'a>(&mut self,
+                                       cx: &CrateContext<'a, 'tcx>,
+                                       type_: Ty<'tcx>,
+                                       metadata: DIType) {
+        if !self.type_to_metadata.insert(type_, metadata) {
             cx.sess().bug(format!("Type metadata for Ty '{}' is already in the TypeMap!",
                                    ppaux::ty_to_string(cx.tcx(), type_)).as_slice());
         }
@@ -301,8 +301,8 @@ impl TypeMap {
         }
     }
 
-    fn find_metadata_for_type(&self, type_: Ty) -> Option<DIType> {
-        self.type_to_metadata.find_copy(&ty::type_id(type_))
+    fn find_metadata_for_type(&self, type_: Ty<'tcx>) -> Option<DIType> {
+        self.type_to_metadata.find_copy(&type_)
     }
 
     fn find_metadata_for_unique_id(&self, unique_type_id: UniqueTypeId) -> Option<DIType> {
@@ -319,8 +319,8 @@ impl TypeMap {
     // Get the UniqueTypeId for the given type. If the UniqueTypeId for the given
     // type has been requested before, this is just a table lookup. Otherwise an
     // ID will be generated and stored for later lookup.
-    fn get_unique_type_id_of_type<'a, 'tcx>(&mut self, cx: &CrateContext<'a, 'tcx>,
-                                            type_: Ty<'tcx>) -> UniqueTypeId {
+    fn get_unique_type_id_of_type<'a>(&mut self, cx: &CrateContext<'a, 'tcx>,
+                                      type_: Ty<'tcx>) -> UniqueTypeId {
 
         // basic type           -> {:name of the type:}
         // tuple                -> {tuple_(:param-uid:)*}
@@ -343,7 +343,7 @@ impl TypeMap {
         // unique vec box (~[]) -> {HEAP_VEC_BOX<:pointee-uid:>}
         // gc box               -> {GC_BOX<:pointee-uid:>}
 
-        match self.type_to_unique_id.find_copy(&ty::type_id(type_)) {
+        match self.type_to_unique_id.find_copy(&type_) {
             Some(unique_type_id) => return unique_type_id,
             None => { /* generate one */}
         };
@@ -487,11 +487,11 @@ impl TypeMap {
         unique_type_id.shrink_to_fit();
 
         let key = self.unique_id_interner.intern(Rc::new(unique_type_id));
-        self.type_to_unique_id.insert(ty::type_id(type_), UniqueTypeId(key));
+        self.type_to_unique_id.insert(type_, UniqueTypeId(key));
 
         return UniqueTypeId(key);
 
-        fn from_def_id_and_substs<'a, 'tcx>(type_map: &mut TypeMap,
+        fn from_def_id_and_substs<'a, 'tcx>(type_map: &mut TypeMap<'tcx>,
                                             cx: &CrateContext<'a, 'tcx>,
                                             def_id: ast::DefId,
                                             substs: &subst::Substs<'tcx>,
@@ -542,10 +542,10 @@ impl TypeMap {
         }
     }
 
-    fn get_unique_type_id_of_closure_type<'a, 'tcx>(&mut self,
-                                                    cx: &CrateContext<'a, 'tcx>,
-                                                    closure_ty: ty::ClosureTy<'tcx>,
-                                                    unique_type_id: &mut String) {
+    fn get_unique_type_id_of_closure_type<'a>(&mut self,
+                                              cx: &CrateContext<'a, 'tcx>,
+                                              closure_ty: ty::ClosureTy<'tcx>,
+                                              unique_type_id: &mut String) {
         let ty::ClosureTy { fn_style,
                             onceness,
                             store,
@@ -612,11 +612,11 @@ impl TypeMap {
     // Get the UniqueTypeId for an enum variant. Enum variants are not really
     // types of their own, so they need special handling. We still need a
     // UniqueTypeId for them, since to debuginfo they *are* real types.
-    fn get_unique_type_id_of_enum_variant<'a, 'tcx>(&mut self,
-                                                    cx: &CrateContext<'a, 'tcx>,
-                                                    enum_type: Ty<'tcx>,
-                                                    variant_name: &str)
-                                                    -> UniqueTypeId {
+    fn get_unique_type_id_of_enum_variant<'a>(&mut self,
+                                              cx: &CrateContext<'a, 'tcx>,
+                                              enum_type: Ty<'tcx>,
+                                              variant_name: &str)
+                                              -> UniqueTypeId {
         let enum_type_id = self.get_unique_type_id_of_type(cx, enum_type);
         let enum_variant_type_id = format!("{}::{}",
                                            self.get_unique_type_id_as_string(enum_type_id)
@@ -642,14 +642,14 @@ macro_rules! return_if_metadata_created_in_meantime(
 
 
 /// A context object for maintaining all state needed by the debuginfo module.
-pub struct CrateDebugContext {
+pub struct CrateDebugContext<'tcx> {
     llcontext: ContextRef,
     builder: DIBuilderRef,
     current_debug_location: Cell<DebugLocation>,
     created_files: RefCell<HashMap<String, DIFile>>,
     created_enum_disr_types: RefCell<HashMap<ast::DefId, DIType>>,
 
-    type_map: RefCell<TypeMap>,
+    type_map: RefCell<TypeMap<'tcx>>,
     namespace_map: RefCell<HashMap<Vec<ast::Name>, Rc<NamespaceTreeNode>>>,
 
     // This collection is used to assert that composite types (structs, enums,
@@ -657,8 +657,8 @@ pub struct CrateDebugContext {
     composite_types_completed: RefCell<HashSet<DIType>>,
 }
 
-impl CrateDebugContext {
-    pub fn new(llmod: ModuleRef) -> CrateDebugContext {
+impl<'tcx> CrateDebugContext<'tcx> {
+    pub fn new(llmod: ModuleRef) -> CrateDebugContext<'tcx> {
         debug!("CrateDebugContext::new");
         let builder = unsafe { llvm::LLVMDIBuilderCreate(llmod) };
         // DIBuilder inherits context from the module, so we'd better use the same one
@@ -3108,9 +3108,9 @@ fn bytes_to_bits(bytes: u64) -> u64 {
 }
 
 #[inline]
-fn debug_context<'a>(cx: &'a CrateContext) -> &'a CrateDebugContext {
-    let debug_context: &'a CrateDebugContext = cx.dbg_cx().as_ref().unwrap();
-    debug_context
+fn debug_context<'a, 'tcx>(cx: &'a CrateContext<'a, 'tcx>) -> &'a CrateDebugContext<'tcx> {
+    let dbg_cx: &'a CrateDebugContext<'tcx> = cx.dbg_cx().as_ref().unwrap();
+    dbg_cx
 }
 
 #[inline]

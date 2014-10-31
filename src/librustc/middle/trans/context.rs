@@ -140,7 +140,7 @@ pub struct LocalCrateContext<'tcx> {
     /// Holds the LLVM values for closure IDs.
     unboxed_closure_vals: RefCell<HashMap<MonoId<'tcx>, ValueRef>>,
 
-    dbg_cx: Option<debuginfo::CrateDebugContext>,
+    dbg_cx: Option<debuginfo::CrateDebugContext<'tcx>>,
 
     eh_personality: RefCell<Option<ValueRef>>,
 
@@ -694,7 +694,7 @@ impl<'b, 'tcx> CrateContext<'b, 'tcx> {
         &self.local.unboxed_closure_vals
     }
 
-    pub fn dbg_cx<'a>(&'a self) -> &'a Option<debuginfo::CrateDebugContext> {
+    pub fn dbg_cx<'a>(&'a self) -> &'a Option<debuginfo::CrateDebugContext<'tcx>> {
         &self.local.dbg_cx
     }
 

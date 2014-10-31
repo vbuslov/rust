@@ -189,17 +189,7 @@ pub fn memoized<T: Clone, U: Clone, M: MutableMap<T, U>>(
     arg: T,
     f: |T| -> U
 ) -> U {
-    memoized_with_key(cache, arg, f, |arg| arg.clone())
-}
-
-#[inline(always)]
-pub fn memoized_with_key<T, K, U: Clone, M: MutableMap<K, U>>(
-    cache: &RefCell<M>,
-    arg: T,
-    f: |T| -> U,
-    k: |&T| -> K
-) -> U {
-    let key = k(&arg);
+    let key = arg.clone();
     let result = cache.borrow().find(&key).map(|result| result.clone());
     match result {
         Some(result) => result,
